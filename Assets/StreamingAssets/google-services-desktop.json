@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "248538698533",
+    "project_id": "arway-ar-navigation",
+    "storage_bucket": "arway-ar-navigation.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:248538698533:android:f9f3075ac0f01e3b9100cc",
+        "android_client_info": {
+          "package_name": "com.KenDaShua.arWay"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWNtm2LlQ7crdeI4Rvhyvnv_H5J2ROv7k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

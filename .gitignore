@@ -1,0 +1,34 @@
+# Unity auto-generated cache and builds
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+.utmp/
+*BurstDebugInformation*
+
+# Visual Studio / IDE temporary files
+.vs/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+
+# Build outputs & executables
+*.apk
+*.aab
+*.app
+*.unitypackage
+
+# Ignore build executables
+*.apk
+*.aab
+
+# Ignore Firebase binaries and assets
+Assets/Firebase/
+*.bundle
+*.so

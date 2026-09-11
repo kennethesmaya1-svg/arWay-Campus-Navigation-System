@@ -1,0 +1,4 @@
+repository "arWay_v1/arWay_v1 2026-07-15_01-19-06@18968421650540@cloud"
+  path "/"
+    br "/main"
+    co "/main"
