@@ -281,10 +281,10 @@ public class BuildingDataService : MonoBehaviour
         // FIRESTORE DOCUMENT
         // -----------------------------------------------------
 
-        Debug.Log(
-            $"[BuildingData] Requesting Firestore document: " +
-            $"buildings/{buildingId}"
-        );
+        // Debug.Log(
+        //     $"[BuildingData] Requesting Firestore document: " +
+        //     $"buildings/{buildingId}"
+        // );
 
         DocumentReference document =
             firestore
@@ -363,10 +363,10 @@ public class BuildingDataService : MonoBehaviour
         }
 
 
-        Debug.Log(
-            $"[BuildingData] Successfully received " +
-            $"buildings/{buildingId}"
-        );
+        // Debug.Log(
+        //     $"[BuildingData] Successfully received " +
+        //     $"buildings/{buildingId}"
+        // );
 
 
         // -----------------------------------------------------
@@ -509,10 +509,10 @@ public class BuildingDataService : MonoBehaviour
         {
             if (IsCloudinaryUrl(storagePath))
             {
-                Debug.Log(
-                    $"[BuildingData] Downloading building image from Cloudinary: " +
-                    $"{storagePath}"
-                );
+                // // Debug.Log(
+                //     $"[BuildingData] Downloading building image from Cloudinary: " +
+                //     $"{storagePath}"
+                // );
             }
 
             yield return StartCoroutine(

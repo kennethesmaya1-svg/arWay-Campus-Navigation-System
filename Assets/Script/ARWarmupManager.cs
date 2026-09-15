@@ -1,26 +1,48 @@
 using UnityEngine;
 using TMPro;
+using System;
 using System.Collections;
 using UnityEngine.UI;
 
 public class ARWarmupManager : MonoBehaviour
 {
     [Header("UI References")]
-    public GameObject homePanel;           // Drag Panel_Destination here
-    public TextMeshProUGUI statusText;     // Drag your status text here
-    public Slider progressBar;             // Optional progress bar
-    public Button retryButton;             // Drag a Retry button here (hidden by default)
+    public GameObject homePanel;
+    public TextMeshProUGUI statusText;
+    public Slider progressBar;
+    public Button retryButton;
 
-    // Internal
-    private NodeManager _nav;
-    [SerializeField] private LocationServiceManager _locationService;
+    [Header("References")]
+    [SerializeField] private NodeManager nodeManager;
+
+    // ---------------------------------------------------------
+    // EVENTS
+    // ---------------------------------------------------------
+
+    /// <summary>
+    /// Fired once GPS + WPS + localization stability are ready.
+    /// </summary>
+    public event Action OnLocalizationReady;
+
+    /// <summary>
+    /// True when localization has successfully completed.
+    /// </summary>
+    public bool IsReady { get; private set; }
+
+    // ---------------------------------------------------------
+    // INTERNAL
+    // ---------------------------------------------------------
+
     private Coroutine _warmupCoroutine;
 
-    void Awake()
+    // ---------------------------------------------------------
+    // UNITY
+    // ---------------------------------------------------------
+
+    private void Awake()
     {
-        _nav = Object.FindFirstObjectByType<NodeManager>();
-        if (_locationService == null)
-            _locationService = Object.FindFirstObjectByType<LocationServiceManager>();
+        if (nodeManager == null)
+            nodeManager = FindFirstObjectByType<NodeManager>();
 
         if (retryButton != null)
         {
@@ -29,175 +51,343 @@ public class ARWarmupManager : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------
+    // START WARMUP
+    // ---------------------------------------------------------
+
     public void StartLoading()
     {
+        Debug.Log("ARWarmupManager: Starting localization warmup.");
+
+        IsReady = false;
+
         gameObject.SetActive(true);
 
         if (retryButton != null)
             retryButton.gameObject.SetActive(false);
 
+        if (progressBar != null)
+            progressBar.value = 0f;
+
         if (_warmupCoroutine != null)
             StopCoroutine(_warmupCoroutine);
-        
-        if (_nav == null)
-            {
-                ShowError("Navigation system is unavailable.");
-                return;
-            }
 
         _warmupCoroutine = StartCoroutine(WarmupRoutine());
     }
 
-    IEnumerator WarmupRoutine()
+    // ---------------------------------------------------------
+    // WARMUP
+    // ---------------------------------------------------------
+
+    private IEnumerator WarmupRoutine()
     {
 #if UNITY_EDITOR
-        // EDITOR MODE: simulate warmup with a fixed countdown
+
+        // =====================================================
+        // EDITOR MOCK
+        // =====================================================
+
         float editorTimer = 0f;
-        float editorTarget = _nav != null ? _nav.StableSeconds : 10f;
+        float editorTarget =
+            nodeManager != null
+                ? nodeManager.StableSeconds
+                : 5f;
 
         while (editorTimer < editorTarget)
         {
             editorTimer += Time.deltaTime;
+
             if (statusText != null)
-                statusText.text = $"[Editor] Simulating localization... {editorTarget - editorTimer:F0}s";
+            {
+                statusText.text =
+                    $"[Editor] Simulating localization...\n" +
+                    $"{editorTimer:F1}/{editorTarget:F1}s";
+            }
+
             if (progressBar != null)
-                progressBar.value = editorTimer / editorTarget;
+                progressBar.value =
+                    Mathf.Clamp01(editorTimer / editorTarget);
+
             yield return null;
         }
 
-        if (statusText != null) statusText.text = "Ready!";
-        if (progressBar != null) progressBar.value = 1f;
+        if (statusText != null)
+            statusText.text = "Localization ready!";
+
+        if (progressBar != null)
+            progressBar.value = 1f;
+
         yield return new WaitForSeconds(0.5f);
-        if (homePanel != null) homePanel.SetActive(false);
-        gameObject.SetActive(false);
+
+        FinishWarmup();
 
 #else
-        // DEVICE MODE: react to real GPS and WPS conditions
-        if (_locationService == null)
+
+        // =====================================================
+        // DEVICE MODE
+        // =====================================================
+
+        if (nodeManager == null)
         {
-            ShowError("Location service is unavailable.");
+            ShowError("NodeManager was not found.");
             yield break;
         }
 
-        _locationService.StartLocationService();
+        // -----------------------------------------------------
+        // PHASE 1: GPS
+        // -----------------------------------------------------
 
-        // Phase 1: Wait for GPS to start running
-        if (statusText != null) statusText.text = "Acquiring GPS signal...";
-        if (progressBar != null) progressBar.value = 0f;
+        if (statusText != null)
+            statusText.text = "Acquiring GPS signal...";
+
+        if (progressBar != null)
+            progressBar.value = 0f;
 
         float gpsTimeout = 15f;
         float gpsWait = 0f;
-        while (!_locationService.IsRunning && gpsWait < gpsTimeout)
+
+        while (
+            Input.location.status != LocationServiceStatus.Running &&
+            gpsWait < gpsTimeout)
         {
             gpsWait += Time.deltaTime;
+
             if (statusText != null)
-                statusText.text = $"Acquiring GPS signal... ({gpsTimeout - gpsWait:F0}s)";
+            {
+                statusText.text =
+                    $"Acquiring GPS signal...\n" +
+                    $"{gpsTimeout - gpsWait:F0}s remaining";
+            }
+
             if (progressBar != null)
-                progressBar.value = gpsWait / gpsTimeout * 0.2f;
+            {
+                progressBar.value =
+                    Mathf.Lerp(
+                        0f,
+                        0.2f,
+                        gpsWait / gpsTimeout);
+            }
+
             yield return null;
         }
 
-        if (!_locationService.IsRunning)
+        if (Input.location.status != LocationServiceStatus.Running)
         {
-            ShowError("GPS unavailable. Move outdoors and try again.");
+            ShowError(
+                "GPS unavailable.\n" +
+                "Move outdoors and try again.");
+
             yield break;
         }
 
-        // Phase 2: Wait for WPS to become available
-        if (statusText != null) statusText.text = "Connecting to AR positioning...";
+        // -----------------------------------------------------
+        // PHASE 2: WPS
+        // -----------------------------------------------------
+
+        if (statusText != null)
+            statusText.text =
+                "Connecting to AR positioning...";
 
         float wpsTimeout = 30f;
         float wpsWait = 0f;
-        while (!_nav.IsWpsStable && wpsWait < wpsTimeout)
+
+        while (
+            !nodeManager.IsWpsStable &&
+            wpsWait < wpsTimeout)
         {
             wpsWait += Time.deltaTime;
-            float acc = _nav.GpsAccuracy;
-            string accStr = acc >= 0 ? $"{acc:F0}m" : "--";
+
+            float accuracy =
+                nodeManager.GpsAccuracy;
+
+            string accuracyText =
+                accuracy >= 0f
+                    ? $"{accuracy:F1}m"
+                    : "--";
+
             if (statusText != null)
-                statusText.text = $"Connecting to AR positioning... GPS: {accStr}";
+            {
+                statusText.text =
+                    $"Connecting to AR positioning...\n" +
+                    $"GPS accuracy: {accuracyText}";
+            }
+
             if (progressBar != null)
-                progressBar.value = 0.2f + (wpsWait / wpsTimeout * 0.3f);
+            {
+                progressBar.value =
+                    0.2f +
+                    (wpsWait / wpsTimeout * 0.3f);
+            }
+
             yield return null;
         }
 
-        if (!_nav.IsWpsStable)
+        if (!nodeManager.IsWpsStable)
         {
-            ShowError("AR positioning failed. Move to an open area and try again.");
+            ShowError(
+                "AR positioning failed.\n" +
+                "Move to an open area and try again.");
+
             yield break;
         }
 
-        // Phase 3: Wait for GPS accuracy + stability timer
-        bool wasReady = false;
-        float stableTarget = _nav.StableSeconds;
-        float threshold = _nav.GpsAccuracyThreshold;
+        // -----------------------------------------------------
+        // PHASE 3: GPS + WPS STABILITY
+        // -----------------------------------------------------
+
+        float stableTarget =
+            nodeManager.StableSeconds;
+
+        float threshold =
+            nodeManager.GpsAccuracyThreshold;
 
         while (true)
         {
-            bool isReady = _nav.IsLocalizationReady();
-            float accuracy = _nav.GpsAccuracy;
-            float stableDuration = _nav.StableDuration;
+            bool ready =
+                nodeManager.IsLocalizationReady();
 
-            if (!isReady)
+            float accuracy =
+                nodeManager.GpsAccuracy;
+
+            float stableDuration =
+                nodeManager.StableDuration;
+
+            if (!ready)
             {
-                wasReady = false;
-                if (!_nav.IsWpsStable)
+                if (statusText != null)
                 {
-                    if (statusText != null)
-                        statusText.text = "AR positioning lost. Reconnecting...";
+                    if (!nodeManager.IsWpsStable)
+                    {
+                        statusText.text =
+                            "AR positioning lost.\n" +
+                            "Reconnecting...";
+                    }
+                    else
+                    {
+                        string accuracyText =
+                            accuracy >= 0f
+                                ? $"{accuracy:F1}m"
+                                : "--";
+
+                        statusText.text =
+                            $"Improving GPS accuracy...\n" +
+                            $"Accuracy: {accuracyText}\n" +
+                            $"Required: < {threshold:F0}m";
+                    }
                 }
-                else
-                {
-                    string accStr = accuracy >= 0 ? $"{accuracy:F0}m" : "--";
-                    if (statusText != null)
-                        statusText.text = $"Improving GPS accuracy... {accStr} (need <{threshold:F0}m)\nMove to an open area with clear sky view.";
-                }
+
                 if (progressBar != null)
                     progressBar.value = 0.5f;
             }
             else
             {
-                if (!wasReady)
+                if (statusText != null)
                 {
-                    wasReady = true;
-                    if (statusText != null) statusText.text = "Good signal! Stabilizing...";
+                    statusText.text =
+                        $"Stabilizing AR...\n" +
+                        $"{stableDuration:F1}/{stableTarget:F1}s\n" +
+                        $"GPS accuracy: {accuracy:F1}m";
                 }
 
-                float stabilityProgress = stableDuration / stableTarget;
-                if (statusText != null)
-                    statusText.text = $"Stabilizing AR... {stableDuration:F0}/{stableTarget:F0}s\nGPS accuracy: {accuracy:F1}m";
                 if (progressBar != null)
-                    progressBar.value = 0.5f + stabilityProgress * 0.5f;
+                {
+                    float stabilityProgress =
+                        Mathf.Clamp01(
+                            stableDuration /
+                            stableTarget);
+
+                    progressBar.value =
+                        0.5f +
+                        stabilityProgress * 0.5f;
+                }
 
                 if (stableDuration >= stableTarget)
                 {
-                    if (statusText != null) statusText.text = "Localization ready!";
-                    if (progressBar != null) progressBar.value = 1f;
+                    if (statusText != null)
+                        statusText.text =
+                            "Localization ready!";
+
+                    if (progressBar != null)
+                        progressBar.value = 1f;
+
                     yield return new WaitForSeconds(0.5f);
-                    if (homePanel != null) homePanel.SetActive(false);
-                    gameObject.SetActive(false);
+
+                    FinishWarmup();
+
                     yield break;
                 }
             }
 
             yield return null;
         }
+
 #endif
     }
 
+    // ---------------------------------------------------------
+    // FINISH
+    // ---------------------------------------------------------
+
+    private void FinishWarmup()
+    {
+        if (IsReady)
+            return;
+
+        IsReady = true;
+
+        Debug.Log(
+            "ARWarmupManager: GPS/WPS localization READY.");
+
+        OnLocalizationReady?.Invoke();
+
+        // IMPORTANT:
+        // Do NOT hide HomePanel here.
+        //
+        // The navigation sequence will hide it only
+        // after AR objects and route are successfully ready.
+
+        gameObject.SetActive(false);
+    }
+
+    // ---------------------------------------------------------
+    // ERROR
+    // ---------------------------------------------------------
+
     private void ShowError(string message)
     {
-        if (statusText != null) statusText.text = message;
-        if (progressBar != null) progressBar.value = 0f;
-        if (retryButton != null) retryButton.gameObject.SetActive(true);
-        Debug.LogWarning("Warmup error: " + message);
+        if (statusText != null)
+            statusText.text = message;
+
+        if (progressBar != null)
+            progressBar.value = 0f;
+
+        if (retryButton != null)
+            retryButton.gameObject.SetActive(true);
+
+        Debug.LogWarning(
+            "ARWarmupManager: " + message);
     }
+
+    public void HideHomePanel()
+    {
+        if (homePanel != null)
+            homePanel.SetActive(false);
+    }
+
+    // ---------------------------------------------------------
+    // RETRY
+    // ---------------------------------------------------------
 
     private void OnRetry()
     {
-        // if (_nav != null)
-        //     _nav.ClearNavigation();
+        IsReady = false;
+
+        if (nodeManager != null)
+            nodeManager.ClearNavigation();
+
         if (homePanel != null)
             homePanel.SetActive(true);
-        gameObject.SetActive(false);
+
+        StartLoading();
     }
 }

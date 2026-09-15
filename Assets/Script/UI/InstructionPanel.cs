@@ -18,6 +18,7 @@ public class InstructionPanel : MonoBehaviour
     [Header("Buttons")]
     public Button btnNext;
     public Button btnBack;
+    public Button btnSkip;
     public TextMeshProUGUI txtNext;
 
     private int currentSlide = 0;
@@ -31,6 +32,9 @@ public class InstructionPanel : MonoBehaviour
 
         if (btnNext == null)
         { Debug.LogError("MISSING: BTN_Next not assigned!"); return; }
+        
+        if (btnSkip == null)
+        { Debug.LogError("MISSING: BTN_Skip not assigned!"); return; }
 
         if (txtNext == null)
         { Debug.LogError("MISSING: TXT_Next not assigned!"); return; }
@@ -40,6 +44,7 @@ public class InstructionPanel : MonoBehaviour
 
         btnNext.onClick.AddListener(OnNextClicked);
         btnBack.onClick.AddListener(OnBackClicked);
+        btnSkip.onClick.AddListener(OnSkipClicked);
         GoToSlide(0, false);
     }
 
@@ -65,6 +70,12 @@ public class InstructionPanel : MonoBehaviour
         {
             GoToSlide(currentSlide - 1, true);
         }
+    }
+
+    void OnSkipClicked()
+    {
+        if (isAnimating) return;
+        LaunchApp();
     }
 
     void GoToSlide(int index, bool animate)
@@ -148,8 +159,24 @@ public class InstructionPanel : MonoBehaviour
 
     void UpdateButton(int index)
     {
+        bool isFirst = (index == 0);
         bool isLast = (index == totalSlides - 1);
+
+        // Next button text
         txtNext.text = isLast ? "Let's Go!" : "Next";
+
+        // FIRST PANEL
+        if (isFirst)
+        {
+            btnSkip.gameObject.SetActive(true);
+            btnBack.gameObject.SetActive(false);
+        }
+        // SECOND PANEL AND ALL FOLLOWING PANELS
+        else
+        {
+            btnSkip.gameObject.SetActive(false);
+            btnBack.gameObject.SetActive(true);
+        }
     }
 
     void LaunchApp()

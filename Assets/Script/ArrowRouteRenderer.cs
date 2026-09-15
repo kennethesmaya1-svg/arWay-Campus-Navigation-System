@@ -10,22 +10,17 @@ using Niantic.Lightship.AR.WorldPositioning;
 public class ArrowRouteRenderer : MonoBehaviour
 {
     [SerializeField] private AStarRouteService _routeService;
-    [SerializeField] private LocationServiceManager _locationService;
     [SerializeField] private ARWorldPositioningObjectHelper _objectHelper;
     [SerializeField] private GameObject _arrowPrefab;
-    [SerializeField, Min(1f)] private float _arrowSpacingMeters = 5f;
-    [SerializeField, Min(0.1f)] private float _refreshIntervalSeconds = 2f;
+    [SerializeField, Min(1f)] private float _arrowSpacingMeters = 7f;
 
     private readonly List<GameObject> _arrows = new();
-    private float _refreshTimer;
     private bool _missingReferenceWarningShown;
 
     private void Awake()
     {
         if (_routeService == null)
             _routeService = FindFirstObjectByType<AStarRouteService>();
-        if (_locationService == null)
-            _locationService = FindFirstObjectByType<LocationServiceManager>();
         if (_objectHelper == null)
             _objectHelper = FindFirstObjectByType<ARWorldPositioningObjectHelper>();
     }
@@ -52,20 +47,6 @@ public class ArrowRouteRenderer : MonoBehaviour
         ClearArrows();
     }
 
-    private void Update()
-    {
-        if (_routeService == null || !_routeService.HasRoute)
-            return;
-
-        _refreshTimer += Time.deltaTime;
-        if (_refreshTimer < _refreshIntervalSeconds)
-            return;
-
-        _refreshTimer = 0f;
-        if (_routeService.RouteDestination != null)
-            _routeService.TryBuildRoute(_routeService.RouteDestination);
-    }
-
     private void RenderRoute(IReadOnlyList<NavNode> route)
     {
         ClearArrows();
@@ -84,22 +65,15 @@ public class ArrowRouteRenderer : MonoBehaviour
         {
             RoutePoint point = points[index];
             GameObject arrow = Instantiate(_arrowPrefab, transform);
-            arrow.name = $"RouteArrow_{index:D3}";
-            // arrow.transform.rotation = Quaternion.Euler(0f, point.Bearing, 0f);
-            // Rotate arrow so its TIP points toward the destination
-            float arrowBearing = point.Bearing + 180f;
+            arrow.transform.rotation = Quaternion.Euler(0f, point.Bearing, 0f);
 
-            arrow.transform.rotation = Quaternion.Euler(
-                0f,
-                arrowBearing,
-                0f
-            );
             _objectHelper.AddOrUpdateObject(
                 arrow,
                 point.Latitude,
                 point.Longitude,
                 0f,
                 arrow.transform.rotation);
+
             _arrows.Add(arrow);
         }
     }
@@ -165,7 +139,6 @@ public class ArrowRouteRenderer : MonoBehaviour
             if (arrow != null)
                 Destroy(arrow);
         }
-
         _arrows.Clear();
     }
 

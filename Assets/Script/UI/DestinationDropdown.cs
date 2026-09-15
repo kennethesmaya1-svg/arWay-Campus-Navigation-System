@@ -20,6 +20,8 @@ public class DestinationDropdown : MonoBehaviour
     [SerializeField] private NodeManager nodeManager;
     [SerializeField] private BuildingDataService buildingDataService;
     [SerializeField] private BuildingInfoPanelController buildingInfoPanel;
+    [SerializeField] private ARGuideManager arGuideManager;
+    [SerializeField] private ARWarmupManager arWarmupManager;
 
     [Header("UI")]
     [SerializeField] private string placeholderText = "Select a destination";
@@ -51,7 +53,18 @@ public class DestinationDropdown : MonoBehaviour
         if (buildingDataService == null)
             buildingDataService = FindFirstObjectByType<BuildingDataService>();
 
+        if (arGuideManager == null)
+            arGuideManager = FindFirstObjectByType<ARGuideManager>();
+
+        if (arWarmupManager == null)
+            arWarmupManager =
+                FindFirstObjectByType<ARWarmupManager>();
+
         _dropdown.onValueChanged.AddListener(OnDropdownValueChanged);
+
+        if (arWarmupManager != null)
+            arWarmupManager.OnLocalizationReady +=
+                OnLocalizationReady;
     }
 
     private void OnEnable()
@@ -73,6 +86,10 @@ public class DestinationDropdown : MonoBehaviour
     {
         if (_dropdown != null)
             _dropdown.onValueChanged.RemoveListener(OnDropdownValueChanged);
+
+        if (arWarmupManager != null)
+            arWarmupManager.OnLocalizationReady -=
+                OnLocalizationReady;
     }
 
     // ---------------------------------------------------------
@@ -397,18 +414,6 @@ public class DestinationDropdown : MonoBehaviour
 
     private void OnDropdownValueChanged(int optionIndex)
     {
-        // -----------------------------------------------------
-        // IMPORTANT:
-        //
-        // There is NO placeholder option.
-        //
-        // Therefore:
-        //
-        // optionIndex 0 = first destination
-        // optionIndex 1 = second destination
-        // optionIndex 2 = third destination
-        // -----------------------------------------------------
-
         int destinationIndex = optionIndex;
 
         if (destinationIndex < 0 ||
@@ -418,24 +423,30 @@ public class DestinationDropdown : MonoBehaviour
 
             nodeManager?.SetActiveDestination(null);
 
+            if (arGuideManager != null)
+            {
+                arGuideManager.SetDestinationSelected(false);
+            }
+
             SetCaption(placeholderText);
 
             return;
         }
 
-        // -----------------------------------------------------
-        // Get selected destination
-        // -----------------------------------------------------
-
         SelectedDestination =
             _destinations[destinationIndex];
 
-        // -----------------------------------------------------
-        // Update visible caption.
-        //
-        // This replaces "Select a destination" with the
-        // selected building name.
-        // -----------------------------------------------------
+        Debug.Log(
+                $"DestinationDropdown: Selected " +
+                $"{GetFallbackLabel(SelectedDestination)} " +
+                $"(buildingId={SelectedDestination.buildingId})"
+);
+
+        // Tell ARGuideManager that a destination has been selected.
+        if (arGuideManager != null)
+        {
+            arGuideManager.SetDestinationSelected(true);
+        }
 
         if (_dropdown.options.Count > optionIndex)
         {
@@ -450,38 +461,111 @@ public class DestinationDropdown : MonoBehaviour
             $"(buildingId={SelectedDestination.buildingId})"
         );
 
-        // -----------------------------------------------------
-        // Load Firebase building information
-        // -----------------------------------------------------
-
         LoadSelectedBuildingInfo();
 
-        // -----------------------------------------------------
-        // Set active destination
-        // -----------------------------------------------------
-
-        if (nodeManager != null &&
-            !nodeManager.SetActiveDestination(SelectedDestination))
+        if (arWarmupManager == null)
         {
+            Debug.LogError(
+                "DestinationDropdown: ARWarmupManager is not assigned.");
+
             return;
         }
 
-        // -----------------------------------------------------
+        Debug.Log(
+            "Destination selected. Starting AR warmup.");
+
+        arWarmupManager.StartLoading();
+
+        // if (nodeManager != null &&
+        //     !nodeManager.SetActiveDestination(SelectedDestination))
+        // {
+        //     return;
+        // }
+
         // Build route
-        // -----------------------------------------------------
+        // if (routeService == null)
+        //     return;
 
-        if (routeService == null)
-            return;
+        // if (!routeService.TryBuildRoute(SelectedDestination))
+        // {
+        //     Debug.LogWarning(
+        //         $"DestinationDropdown: Could not build a route to " +
+        //         $"{GetFallbackLabel(SelectedDestination)}. " +
+        //         routeService.LastFailure
+        //     );
+        // }
+    }
 
-        if (!routeService.TryBuildRoute(SelectedDestination))
+    private void OnLocalizationReady()
+    {
+        Debug.Log(
+            "DestinationDropdown: Localization is ready.");
+
+        if (SelectedDestination == null)
         {
             Debug.LogWarning(
-                $"DestinationDropdown: Could not build a route to " +
-                $"{GetFallbackLabel(SelectedDestination)}. " +
-                routeService.LastFailure
-            );
+                "DestinationDropdown: No destination selected.");
+
+            return;
+        }
+
+        // STEP 1
+        // Place the AR navigation objects
+        if (nodeManager == null)
+        {
+            Debug.LogError(
+                "DestinationDropdown: NodeManager is missing.");
+
+            return;
+        }
+
+        nodeManager.PlaceARObjects();
+
+        // STEP 2
+        // Set the selected destination marker
+        if (nodeManager != null)
+        {
+            if (!nodeManager.SetActiveDestination(
+                    SelectedDestination))
+            {
+                Debug.LogError(
+                    "DestinationDropdown: Failed to set destination.");
+
+                return;
+            }
+        }
+
+        // STEP 3
+        // Build the A* route
+        if (routeService == null)
+        {
+            Debug.LogError(
+                "DestinationDropdown: AStarRouteService is missing.");
+
+            return;
+        }
+
+        if (!routeService.TryBuildRoute(
+                SelectedDestination))
+        {
+            Debug.LogWarning(
+                "DestinationDropdown: Route could not be built.\n" +
+                routeService.LastFailure);
+
+            return;
+        }
+
+        // STEP 4
+        Debug.Log("DestinationDropdown: Navigation route successfully built.");
+
+        // STEP 5
+        // Hide HomePanel
+        if (arWarmupManager != null)
+        {
+            arWarmupManager.HideHomePanel();
         }
     }
+
 
     // ---------------------------------------------------------
     // FALLBACK LABEL

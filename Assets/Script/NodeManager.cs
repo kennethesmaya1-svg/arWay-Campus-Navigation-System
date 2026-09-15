@@ -173,19 +173,19 @@ public class NodeManager : MonoBehaviour
 
             node.latitude = coordinate.latitude;
             node.longitude = coordinate.longitude;
-            node.elevation = coordinate.elevation;
+            //node.elevation = coordinate.elevation;
             node.isDestination = false;
             node.ClearNeighbors();
 
             _instantiatedObjects.Add(nodeObject);
             _pathNodes.Add(node);
             _navigationNodes.Add(node);
-            _objectHelper.AddOrUpdateObject(
-                nodeObject,
-                coordinate.latitude,
-                coordinate.longitude,
-                0f,
-                Quaternion.identity);
+            // _objectHelper.AddOrUpdateObject(
+            //     nodeObject,
+            //     coordinate.latitude,
+            //     coordinate.longitude,
+            //     0f,
+            //     Quaternion.identity);
         }
 
         for (var index = 0; index < graphNodes.Count; index++)
@@ -196,6 +196,73 @@ public class NodeManager : MonoBehaviour
                     _pathNodes[index].ConnectBidirectional(_pathNodes[neighborIndex]);
             }
         }
+    }
+
+    private bool _arObjectsPlaced;
+
+    public bool AreARObjectsPlaced =>
+        _arObjectsPlaced;
+
+    public void PlaceARObjects()
+    {
+        if (_arObjectsPlaced)
+        {
+            Debug.Log(
+                "NodeManager: AR objects are already placed.");
+
+            return;
+        }
+
+        if (_objectHelper == null)
+        {
+            Debug.LogError(
+                "NodeManager: ARWorldPositioningObjectHelper is missing.");
+
+            return;
+        }
+
+        Debug.Log(
+            "NodeManager: Starting WPS placement of AR objects.");
+
+        // ---------------------------------------------------------
+        // PATH NODES
+        // ---------------------------------------------------------
+
+        foreach (NavNode node in _pathNodes)
+        {
+            if (node == null)
+                continue;
+
+            _objectHelper.AddOrUpdateObject(
+                node.gameObject,
+                node.latitude,
+                node.longitude,
+                0f,
+                Quaternion.identity);
+        }
+
+        // ---------------------------------------------------------
+        // DESTINATION NODES
+        // ---------------------------------------------------------
+
+        foreach (NavNode node in _navigationNodes)
+        {
+            if (node == null ||
+                !node.isDestination)
+                continue;
+
+            _objectHelper.AddOrUpdateObject(
+                node.gameObject,
+                node.latitude,
+                node.longitude,
+                0f,
+                Quaternion.identity);
+        }
+
+        _arObjectsPlaced = true;
+
+        Debug.Log(
+            "NodeManager: Finished WPS placement request.");
     }
 
     private void AddNodes(IEnumerable<NavNode> nodes)
@@ -332,6 +399,7 @@ public class NodeManager : MonoBehaviour
         _stableDuration = 0f;
         _pathGraphReady = false;
         _navigationGraphReady = false;
+        _arObjectsPlaced = false;
     }
 
     private void OnDestroy()
