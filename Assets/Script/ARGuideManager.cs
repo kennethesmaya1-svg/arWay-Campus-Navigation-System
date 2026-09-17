@@ -1,7 +1,24 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Niantic.Lightship.AR.WorldPositioning;
 
+/// <summary>
+/// Controls the AR guide character from the A* route.
+///
+/// Workflow:
+/// 1. DestinationDropdown selects a destination.
+/// 2. AStarRouteService builds the route.
+/// 3. AStarRouteService raises OnRouteComputed.
+/// 4. ARGuideManager receives the route.
+/// 5. The guide is placed using the same
+///    ARWorldPositioningObjectHelper approach as ArrowRouteRenderer.
+/// 6. The character starts moving along the computed route.
+///
+/// The guide is NOT spawned from the camera position.
+/// Its world position comes from the route latitude/longitude.
+/// </summary>
 public class ARGuideManager : MonoBehaviour
 {
     [Header("Guide")]
@@ -13,146 +30,74 @@ public class ARGuideManager : MonoBehaviour
     [SerializeField] private Sprite CharacterON;
     [SerializeField] private Sprite CharacterOFF;
 
-    [Header("Spawn")]
-    [SerializeField] private Transform cameraTransform;
-    [SerializeField] private float spawnDistance = 2f;
-    [SerializeField] private float spawnHeightOffset = 0f;
+    [Header("World Positioning")]
+    [SerializeField] private ARWorldPositioningObjectHelper _objectHelper;
 
-    private GameObject activeGuide;
-    private ARGuideCharacter guideController;
-    private bool destinationSelected;
-    public bool DestinationSelected => destinationSelected;
+    [Tooltip("Distance from the beginning of the computed route where the guide is spawned.")]
+    [SerializeField, Min(0f)] private float spawnDistanceMeters = 2f;
+
+    [Tooltip("Same altitude convention used by ArrowRouteRenderer.")]
+    [SerializeField] private float spawnAltitudeMeters = 0f;
 
     [Header("Route")]
     [SerializeField] private AStarRouteService _routeService;
+
+    private GameObject activeGuide;
+    private ARGuideCharacter guideController;
+
+    private bool destinationSelected;
+
+    public bool DestinationSelected => destinationSelected;
     public bool HasGuide => activeGuide != null;
 
     private void Awake()
     {
         if (_routeService == null)
             _routeService = FindFirstObjectByType<AStarRouteService>();
+
+        if (_objectHelper == null)
+            _objectHelper = FindFirstObjectByType<ARWorldPositioningObjectHelper>();
     }
 
-    public void SpawnGuide()
+    private void OnEnable()
     {
-        RemoveGuide();
-
-        if (guideCharacterPrefab == null)
-        {
-            Debug.LogError("ARGuideManager: Guide Character Prefab is not assigned.");
+        if (_routeService == null)
             return;
-        }
 
-        if (cameraTransform == null)
-        {
-            Camera mainCamera = Camera.main;
+        _routeService.OnRouteComputed += OnRouteComputed;
+        _routeService.OnRouteCleared += OnRouteCleared;
 
-            if (mainCamera != null)
-                cameraTransform = mainCamera.transform;
-        }
-
-        if (cameraTransform == null)
-        {
-            Debug.LogError("ARGuideManager: Camera Transform is missing.");
-            return;
-        }
-
-        Vector3 spawnPosition =
-            cameraTransform.position +
-            cameraTransform.forward * spawnDistance;
-
-        spawnPosition.y += spawnHeightOffset;
-
-        Quaternion spawnRotation = cameraTransform.rotation;
-        spawnRotation.x = 0f;
-        spawnRotation.z = 0f;
-
-        activeGuide = Instantiate(
-            guideCharacterPrefab,
-            spawnPosition,
-            spawnRotation
-        );
-
-        guideController =
-            activeGuide.GetComponent<ARGuideCharacter>();
-
-        if (guideController == null)
-        {
-            guideController =
-                activeGuide.AddComponent<ARGuideCharacter>();
-        }
-
-        activeGuide.SetActive(true);
-        UpdateCharacterButton(true);
-        Debug.Log("ARGuideManager: Guide character spawned.");
+        // Useful if this object is enabled after a route already exists.
+        if (_routeService.HasRoute)
+            OnRouteComputed(_routeService.CurrentRoute);
     }
 
-    public void CharacterButtonClicked()
+    private void OnDisable()
     {
-        if (!destinationSelected)
+        if (_routeService != null)
         {
-            Debug.LogWarning("[ARGuideManager] Cannot toggle character because no destination is selected.");
-            return;
+            _routeService.OnRouteComputed -= OnRouteComputed;
+            _routeService.OnRouteCleared -= OnRouteCleared;
         }
 
-        if (activeGuide == null)
-        {
-            Debug.LogWarning("[ARGuideManager] Cannot toggle character because it has not been spawned." );
-            return;
-        }
-
-        bool isVisible = !activeGuide.activeSelf;
-
-        activeGuide.SetActive(isVisible);
-
-        UpdateCharacterButton(isVisible);
-
-        Debug.Log(isVisible? "ARGuideManager: Guide character shown.": "ARGuideManager: Guide character hidden.");
+        RemoveGuide(false);
     }
 
-    public void StartGuide(List<Transform> path)
+    /// <summary>
+    /// Called when AStarRouteService successfully computes a route.
+    /// </summary>
+    private void OnRouteComputed(IReadOnlyList<NavNode> route)
     {
-        if (path == null || path.Count < 2)
+        if (route == null || route.Count < 2)
         {
             Debug.LogWarning(
-                "ARGuideManager: Cannot start guide. No valid destination path."
+                "ARGuideManager: Cannot spawn guide. " +
+                "The computed route contains fewer than 2 nodes."
             );
 
-            destinationSelected = false;
+            RemoveGuide();
             return;
         }
-
-        destinationSelected = true;
-
-        Debug.Log(
-            $"ARGuideManager: Destination selected. Path points = {path.Count}"
-        );
-
-        // Spawn character on the path, 2 meters ahead of the camera.
-        SpawnGuideOnPath(path, 2f);
-
-        if (guideController == null)
-        {
-            Debug.LogError(
-                "ARGuideManager: Guide controller was not created."
-            );
-            return;
-        }
-
-        guideController.StartGuiding(path);
-    }
-    public void SetDestinationSelected(bool selected)
-    {
-        destinationSelected = selected;
-
-        Debug.Log(
-            $"ARGuideManager: Destination selected = {destinationSelected}"
-        );
-    }
-
-    private void SpawnGuideOnPath(List<Transform> path, float distanceAhead)
-    {
-        RemoveGuide();
 
         if (guideCharacterPrefab == null)
         {
@@ -162,216 +107,121 @@ public class ARGuideManager : MonoBehaviour
             return;
         }
 
-        if (cameraTransform == null)
-        {
-            Camera mainCamera = Camera.main;
-
-            if (mainCamera != null)
-                cameraTransform = mainCamera.transform;
-        }
-
-        if (cameraTransform == null)
+        if (_objectHelper == null)
         {
             Debug.LogError(
-                "ARGuideManager: Camera Transform is missing."
+                "ARGuideManager: ARWorldPositioningObjectHelper is not assigned."
             );
             return;
         }
 
-        Vector3 cameraPosition = cameraTransform.position;
+        List<Transform> path = BuildPath(route);
 
-        // ---------------------------------------------------------
-        // 1. Find the closest point on the navigation path
-        // ---------------------------------------------------------
-
-        int closestSegment = -1;
-        float closestDistance = float.MaxValue;
-        float closestT = 0f;
-
-        for (int i = 0; i < path.Count - 1; i++)
+        if (path.Count < 2)
         {
-            if (path[i] == null || path[i + 1] == null)
-                continue;
-
-            Vector3 a = path[i].position;
-            Vector3 b = path[i + 1].position;
-
-            // Ignore height when finding the nearest path position.
-            Vector3 cameraFlat = cameraPosition;
-            cameraFlat.y = 0f;
-
-            a.y = 0f;
-            b.y = 0f;
-
-            Vector3 segment = b - a;
-
-            if (segment.sqrMagnitude < 0.0001f)
-                continue;
-
-            float t = Vector3.Dot(
-                cameraFlat - a,
-                segment
-            ) / segment.sqrMagnitude;
-
-            t = Mathf.Clamp01(t);
-
-            Vector3 closestPoint = Vector3.Lerp(a, b, t);
-
-            float distance =
-                Vector3.Distance(cameraFlat, closestPoint);
-
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestSegment = i;
-                closestT = t;
-            }
-        }
-
-        if (closestSegment < 0)
-        {
-            Debug.LogError(
-                "ARGuideManager: Could not find nearest path segment."
+            Debug.LogWarning(
+                "ARGuideManager: Computed route does not contain enough valid NavNodes."
             );
             return;
         }
 
-        // ---------------------------------------------------------
-        // 2. Get the nearest position ON the path
-        // ---------------------------------------------------------
+        destinationSelected = true;
 
-        Vector3 segmentStart =
-            path[closestSegment].position;
+        SpawnGuideOnRoute(route, path);
 
-        Vector3 segmentEnd =
-            path[closestSegment + 1].position;
-
-        Vector3 nearestPathPosition =
-            Vector3.Lerp(
-                segmentStart,
-                segmentEnd,
-                closestT
+        if (guideController == null)
+        {
+            Debug.LogError(
+                "ARGuideManager: Guide controller was not created."
             );
+            return;
+        }
 
-        // ---------------------------------------------------------
-        // 3. Move 2 meters forward along the path
-        // ---------------------------------------------------------
+        // Start at the route node immediately after the guide's
+        // spawn position. This prevents the guide from walking
+        // backward to route[0] after being spawned a few meters
+        // along the route.
+        int firstTargetIndex = CalculateFirstTargetIndex(
+            route,
+            spawnDistanceMeters
+        );
 
-        float remainingDistance = distanceAhead;
+        guideController.StartGuiding(path, firstTargetIndex);
 
-        Vector3 spawnPosition = nearestPathPosition;
+        UpdateCharacterButton(true);
 
-        int segmentIndex = closestSegment;
+        Debug.Log(
+            $"ARGuideManager: A* route received. " +
+            $"Guide spawned on route at {spawnDistanceMeters:0.##}m " +
+            $"from RouteStart. Nodes = {path.Count}"
+        );
+    }
 
-        // First move along the current segment.
-        Vector3 currentTarget =
-            path[segmentIndex + 1].position;
+    /// <summary>
+    /// Converts the NavNode route to the Transform path used
+    /// by ARGuideCharacter for movement.
+    /// </summary>
+    private static List<Transform> BuildPath(
+        IReadOnlyList<NavNode> route)
+    {
+        List<Transform> path = new();
 
-        float distanceToCurrentTarget =
-            Vector3.Distance(
-                spawnPosition,
-                currentTarget
+        foreach (NavNode node in route)
+        {
+            if (node != null && node.transform != null)
+                path.Add(node.transform);
+        }
+
+        return path;
+    }
+
+    /// <summary>
+    /// Spawns the character using GPS coordinates, matching
+    /// the positioning approach used by ArrowRouteRenderer.
+    ///
+    /// ArrowRouteRenderer does:
+    ///
+    /// _objectHelper.AddOrUpdateObject(
+    ///     arrow,
+    ///     latitude,
+    ///     longitude,
+    ///     0f,
+    ///     rotation);
+    ///
+    /// The guide uses the same idea.
+    /// </summary>
+    private void SpawnGuideOnRoute(
+        IReadOnlyList<NavNode> route,
+        List<Transform> path)
+    {
+        RemoveGuide(false);
+
+        if (route == null || route.Count < 2)
+            return;
+
+        if (_objectHelper == null)
+        {
+            Debug.LogError(
+                "ARGuideManager: Cannot position guide because " +
+                "ARWorldPositioningObjectHelper is missing."
             );
-
-        if (remainingDistance <= distanceToCurrentTarget)
-        {
-            Vector3 direction =
-                (currentTarget - spawnPosition).normalized;
-
-            spawnPosition +=
-                direction * remainingDistance;
-
-            remainingDistance = 0f;
-        }
-        else
-        {
-            remainingDistance -= distanceToCurrentTarget;
-            spawnPosition = currentTarget;
-
-            // Continue through following path segments.
-            segmentIndex++;
-
-            while (
-                remainingDistance > 0f &&
-                segmentIndex < path.Count - 1
-            )
-            {
-                Vector3 nextPoint =
-                    path[segmentIndex + 1].position;
-
-                Vector3 direction =
-                    nextPoint - spawnPosition;
-
-                float segmentDistance =
-                    direction.magnitude;
-
-                if (segmentDistance < 0.001f)
-                {
-                    segmentIndex++;
-                    continue;
-                }
-
-                direction.Normalize();
-
-                if (remainingDistance <= segmentDistance)
-                {
-                    spawnPosition +=
-                        direction * remainingDistance;
-
-                    remainingDistance = 0f;
-                }
-                else
-                {
-                    spawnPosition = nextPoint;
-                    remainingDistance -= segmentDistance;
-                    segmentIndex++;
-                }
-            }
+            return;
         }
 
-        // ---------------------------------------------------------
-        // 4. Calculate character facing direction
-        // ---------------------------------------------------------
+        RouteSpawnPoint spawnPoint =
+            BuildSpawnPoint(route, spawnDistanceMeters);
 
-        Vector3 forwardDirection;
-
-        if (segmentIndex < path.Count - 1)
-        {
-            forwardDirection =
-                path[segmentIndex + 1].position -
-                spawnPosition;
-        }
-        else
-        {
-            forwardDirection =
-                path[path.Count - 1].position -
-                path[Mathf.Max(0, path.Count - 2)].position;
-        }
-
-        forwardDirection.y = 0f;
-
-        if (forwardDirection.sqrMagnitude < 0.001f)
-        {
-            forwardDirection = cameraTransform.forward;
-            forwardDirection.y = 0f;
-        }
-
-        forwardDirection.Normalize();
-
-        Quaternion spawnRotation =
-            Quaternion.LookRotation(
-                forwardDirection,
-                Vector3.up
-            );
-
-        // ---------------------------------------------------------
-        // 5. Spawn
-        // ---------------------------------------------------------
+        Quaternion rotation = Quaternion.Euler(
+            0f,
+            spawnPoint.Bearing,
+            0f
+        );
 
         activeGuide = Instantiate(
             guideCharacterPrefab,
-            spawnPosition,
-            spawnRotation
+            Vector3.zero,
+            rotation,
+            transform
         );
 
         guideController =
@@ -383,94 +233,369 @@ public class ARGuideManager : MonoBehaviour
                 activeGuide.AddComponent<ARGuideCharacter>();
         }
 
+        // IMPORTANT:
+        // Do NOT use cameraTransform.position here.
+        // The ObjectHelper places the character at the
+        // latitude/longitude of the route.
+        _objectHelper.AddOrUpdateObject(
+            activeGuide,
+            spawnPoint.Latitude,
+            spawnPoint.Longitude,
+            spawnAltitudeMeters,
+            rotation
+        );
+
         activeGuide.SetActive(true);
 
-        UpdateCharacterButton(true);
-
         Debug.Log(
-            $"ARGuideManager: Character spawned ON PATH " +
-            $"2m ahead. Position = {spawnPosition}"
+            $"ARGuideManager: Guide positioned on A* route. " +
+            $"Lat={spawnPoint.Latitude:F8}, " +
+            $"Lon={spawnPoint.Longitude:F8}, " +
+            $"Bearing={spawnPoint.Bearing:F1}°"
         );
     }
 
-    private void OnEnable()
-    {
-        if (_routeService != null)
-            _routeService.OnRouteComputed += OnRouteComputed;
-    }
-
-    private void OnDisable()
-    {
-        if (_routeService != null)
-            _routeService.OnRouteComputed -= OnRouteComputed;
-    }
-
-    private void OnRouteComputed(IReadOnlyList<NavNode> route)
+    /// <summary>
+    /// Finds the GPS position a specified distance along the
+    /// computed route, starting at route[0].
+    ///
+    /// This is the GPS equivalent of moving forward along
+    /// the route before spawning the character.
+    /// </summary>
+    private static RouteSpawnPoint BuildSpawnPoint(
+        IReadOnlyList<NavNode> route,
+        float distanceMeters)
     {
         if (route == null || route.Count == 0)
+            return default;
+
+        if (route.Count == 1)
         {
-            Debug.LogWarning("[ARGuideManager] Route is empty.");
-            return;
+            return new RouteSpawnPoint(
+                route[0].latitude,
+                route[0].longitude,
+                0f
+            );
         }
 
-        List<Transform> path = new List<Transform>();
+        double remaining = Mathf.Max(0f, distanceMeters);
 
-        foreach (NavNode node in route)
+        for (int i = 0; i < route.Count - 1; i++)
         {
-            if (node != null)
-                path.Add(node.transform);
+            NavNode from = route[i];
+            NavNode to = route[i + 1];
+
+            if (from == null || to == null)
+                continue;
+
+            double segmentLength =
+                AStarRouteService.HaversineMeters(
+                    from.latitude,
+                    from.longitude,
+                    to.latitude,
+                    to.longitude
+                );
+
+            if (segmentLength <= 0.0001d)
+                continue;
+
+            float bearing = Bearing(from, to);
+
+            if (remaining <= segmentLength)
+            {
+                double fraction = remaining / segmentLength;
+
+                double latitude = LerpDouble(
+                    from.latitude,
+                    to.latitude,
+                    fraction
+                );
+
+                double longitude = LerpDouble(
+                    from.longitude,
+                    to.longitude,
+                    fraction
+                );
+
+                return new RouteSpawnPoint(
+                    latitude,
+                    longitude,
+                    bearing
+                );
+            }
+
+            remaining -= segmentLength;
         }
 
-        if (path.Count == 0)
-        {
-            Debug.LogWarning("[ARGuideManager] No valid path transforms.");
-            return;
-        }
+        // If spawnDistance is longer than the whole route,
+        // place the guide at the destination.
+        NavNode last = route[route.Count - 1];
+        NavNode previous = route[route.Count - 2];
 
-        destinationSelected = true;
-
-        // Spawn the character on the route.
-        SpawnGuideOnPath(path, spawnDistance);
-
-        if (guideController != null)
-        {
-            guideController.StartGuiding(path);
-        }
-
-        // IMPORTANT:
-        // Character starts HIDDEN after destination selection.
-        if (activeGuide != null)
-            activeGuide.SetActive(false);
-
-        UpdateCharacterButton(false);
-
-        Debug.Log("[ARGuideManager] Destination selected. Guide spawned but hidden.");
+        return new RouteSpawnPoint(
+            last.latitude,
+            last.longitude,
+            Bearing(previous, last)
+        );
     }
 
-    public void RemoveGuide()
+    /// <summary>
+    /// Returns the first NavNode the character should move toward.
+    ///
+    /// Example:
+    /// route 0 -> 1 -> 2 -> 3
+    ///
+    /// Guide is spawned 2m after route 0.
+    /// The first movement target is route 1.
+    /// </summary>
+    private static int CalculateFirstTargetIndex(
+        IReadOnlyList<NavNode> route,
+        float distanceMeters)
     {
+        if (route == null || route.Count <= 1)
+            return 0;
+
+        double remaining = Mathf.Max(0f, distanceMeters);
+
+        for (int i = 0; i < route.Count - 1; i++)
+        {
+            NavNode from = route[i];
+            NavNode to = route[i + 1];
+
+            if (from == null || to == null)
+                continue;
+
+            double segmentLength =
+                AStarRouteService.HaversineMeters(
+                    from.latitude,
+                    from.longitude,
+                    to.latitude,
+                    to.longitude
+                );
+
+            if (segmentLength <= 0.0001d)
+                continue;
+
+            if (remaining <= segmentLength)
+                return i + 1;
+
+            remaining -= segmentLength;
+        }
+
+        return route.Count - 1;
+    }
+
+    private static double LerpDouble(
+        double a,
+        double b,
+        double t)
+    {
+        return a + (b - a) * t;
+    }
+
+    private static float Bearing(
+        NavNode from,
+        NavNode to)
+    {
+        double latitudeA =
+            from.latitude * Math.PI / 180d;
+
+        double latitudeB =
+            to.latitude * Math.PI / 180d;
+
+        double longitudeDelta =
+            (to.longitude - from.longitude) *
+            Math.PI / 180d;
+
+        double y =
+            Math.Sin(longitudeDelta) *
+            Math.Cos(latitudeB);
+
+        double x =
+            Math.Cos(latitudeA) *
+            Math.Sin(latitudeB) -
+            Math.Sin(latitudeA) *
+            Math.Cos(latitudeB) *
+            Math.Cos(longitudeDelta);
+
+        return (float)(
+            (Math.Atan2(y, x) *
+             180d / Math.PI + 360d) % 360d
+        );
+    }
+
+    private void OnRouteCleared()
+    {
+        RemoveGuide();
+        Debug.Log(
+            "ARGuideManager: A* route cleared. Guide removed."
+        );
+    }
+
+    /// <summary>
+    /// Compatibility method for existing UI/code.
+    /// Normally route events control the guide automatically.
+    /// </summary>
+  
+    public void CharacterButtonClicked()
+    {
+        if (!destinationSelected)
+        {
+            Debug.LogWarning(
+            
+    "ARGuideManager: Cannot toggle character because " +
+                "no destination has been selected."
+            );
+            return;
+        }
+
+        if (_routeService == null || !_routeService.HasRoute)
+        {
+            Debug.LogWarning(
+                "ARGuideManager: Cannot toggle character because " +
+                "there is no active A* route."
+            );
+            return;
+        }
+
+        // ---------------------------------------------------------
+        // CHARACTER EXISTS AND IS VISIBLE
+        // → HIDE CHARACTER
+        // ---------------------------------------------------------
+
+        if (activeGuide != null && activeGuide.activeSelf)
+        {
+            activeGuide.SetActive(false);
+
+            UpdateCharacterButton(false);
+
+            Debug.Log(
+                "ARGuideManager: Character hidden."
+            );
+
+            return;
+        }
+
+        // ---------------------------------------------------------
+        // CHARACTER IS HIDDEN / DOES NOT EXIST
+        // → SPAWN CHARACTER AGAIN ON A* ROUTE
+        // ---------------------------------------------------------
+
+        Debug.Log(
+            "ARGuideManager: Spawning character again " +
+            "on the current A* route."
+        );
+
+        OnRouteComputed(_routeService.CurrentRoute);
+
         if (activeGuide != null)
         {
-            Destroy(activeGuide);
+            activeGuide.SetActive(true);
+
+            UpdateCharacterButton(true);
         }
+    }
+
+    /// <summary>
+    /// Compatibility method used by DestinationDropdown.
+    /// </summary>
+    public void SetDestinationSelected(bool selected)
+    {
+        destinationSelected = selected;
+
+        if (!selected)
+        {
+            RemoveGuide();
+        }
+
+        Debug.Log(
+            $"ARGuideManager: Destination selected = {destinationSelected}"
+        );
+    }
+
+    /// <summary>
+    /// Compatibility method for scripts that already call StartGuide().
+    ///
+    /// The preferred workflow is:
+    /// DestinationDropdown -> AStarRouteService -> OnRouteComputed.
+    /// </summary>
+    public void StartGuide(List<Transform> path)
+    {
+        if (path == null || path.Count < 2)
+        {
+            Debug.LogWarning(
+                "ARGuideManager: Cannot start guide. " +
+                "No valid route path was provided."
+            );
+            return;
+        }
+
+        Debug.Log(
+            "ARGuideManager: StartGuide(List<Transform>) is deprecated. " +
+            "Use AStarRouteService.OnRouteComputed instead."
+        );
+
+        // This method intentionally does not create a second
+        // positioning system. The A* route event is the source
+        // of truth for guide spawning.
+    }
+
+    /// <summary>
+    /// Removes the active guide.
+    /// </summary>
+    public void RemoveGuide()
+    {
+        RemoveGuide(true);
+    }
+
+    private void RemoveGuide(bool resetDestination)
+    {
+        if (guideController != null)
+            guideController.StopGuiding();
+
+        if (activeGuide != null)
+            Destroy(activeGuide);
 
         activeGuide = null;
         guideController = null;
-        destinationSelected = false;
+
+        if (resetDestination)
+            destinationSelected = false;
+
         UpdateCharacterButton(false);
-        Debug.Log("ARGuideManager: Destination cleared. " + "Character toggle disabled.");
     }
 
     private void UpdateCharacterButton(bool isVisible)
     {
         if (CharacterBtnImage != null)
         {
-            CharacterBtnImage.sprite = isVisible ? CharacterON : CharacterOFF;
+            CharacterBtnImage.sprite =
+                isVisible ? CharacterON : CharacterOFF;
         }
 
         if (CharacterBtnLabel != null)
         {
-            CharacterBtnLabel.text = isVisible ? "Hide Character" : "Show Character";
+            CharacterBtnLabel.text =
+                isVisible
+                    ? "Hide Character"
+                    : "Show Character";
+        }
+    }
+
+    private readonly struct RouteSpawnPoint
+    {
+        public readonly double Latitude;
+        public readonly double Longitude;
+        public readonly float Bearing;
+
+        public RouteSpawnPoint(
+            double latitude,
+            double longitude,
+            float bearing)
+        {
+            Latitude = latitude;
+            Longitude = longitude;
+            Bearing = bearing;
         }
     }
 }

@@ -65,7 +65,7 @@ public class ArrowRouteRenderer : MonoBehaviour
         {
             RoutePoint point = points[index];
             GameObject arrow = Instantiate(_arrowPrefab, transform);
-            arrow.transform.rotation = Quaternion.Euler(0f, point.Bearing, 0f);
+            arrow.transform.rotation = Quaternion.Euler(0f, 180 - point.Bearing, 0f);
 
             _objectHelper.AddOrUpdateObject(
                 arrow,
@@ -125,7 +125,7 @@ public class ArrowRouteRenderer : MonoBehaviour
     {
         double latitudeA = from.latitude * Math.PI / 180d;
         double latitudeB = to.latitude * Math.PI / 180d;
-        double longitudeDelta = (to.longitude - from.longitude) * Math.PI / 180d;
+        double longitudeDelta = (from.longitude - to.longitude) * Math.PI / 180d;
         double y = Math.Sin(longitudeDelta) * Math.Cos(latitudeB);
         double x = Math.Cos(latitudeA) * Math.Sin(latitudeB) -
                    Math.Sin(latitudeA) * Math.Cos(latitudeB) * Math.Cos(longitudeDelta);

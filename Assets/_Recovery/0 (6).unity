@@ -364,8 +364,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 8
   nodeName: 
-  latitude: 10.6462519
-  longitude: 122.2409328
+  latitude: 10.646237556343584
+  longitude: 122.24097620290303
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -2038,8 +2038,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 29
   nodeName: 
-  latitude: 10.6459325
-  longitude: 122.2411766
+  latitude: 10.645921022684607
+  longitude: 122.2412808845971
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -3320,7 +3320,7 @@ MonoBehaviour:
   m_Camera: {fileID: 957938769}
   m_OriginBaseGameObject: {fileID: 604079061}
   m_CameraFloorOffsetObject: {fileID: 1103084368}
-  m_RequestedTrackingOriginMode: 0
+  m_RequestedTrackingOriginMode: 2
   m_CameraYOffset: 1.1176
 --- !u!4 &604079063
 Transform:
@@ -4163,8 +4163,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 1
   nodeName: 
-  latitude: 10.6459778
-  longitude: 122.2416179
+  latitude: 10.645883532590846
+  longitude: 122.24167764874265
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -4561,9 +4561,9 @@ MonoBehaviour:
   CharacterBtnLabel: {fileID: 1834014659}
   CharacterON: {fileID: 21300000, guid: f499e4ba248c8c84ab41dff0672d5eb4, type: 3}
   CharacterOFF: {fileID: 21300000, guid: b83c4f6d62eff0e44933d2fa5b6bac48, type: 3}
-  _objectHelper: {fileID: 604079077}
-  spawnDistanceMeters: 2
-  spawnAltitudeMeters: 0
+  cameraTransform: {fileID: 957938763}
+  spawnDistance: 2
+  spawnHeightOffset: -2
   _routeService: {fileID: 1406467156}
 --- !u!114 &804497882
 MonoBehaviour:
@@ -7285,8 +7285,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 11
   nodeName: 
-  latitude: 10.6453959
-  longitude: 122.2419324
+  latitude: 10.6453944
+  longitude: 122.2419216
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -8168,8 +8168,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 2
   nodeName: 
-  latitude: 10.6459427
-  longitude: 122.2410242
+  latitude: 10.645939642862158
+  longitude: 122.24106063440534
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -9331,8 +9331,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 3
   nodeName: 
-  latitude: 10.646541
-  longitude: 122.2409758
+  latitude: 10.646532675940527
+  longitude: 122.24104953401348
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
@@ -10908,8 +10908,8 @@ MonoBehaviour:
   isDestination: 1
   buildingId: 7
   nodeName: 
-  latitude: 10.6475805
-  longitude: 122.2410002
+  latitude: 10.6475792
+  longitude: 122.2409999
   elevation: 0
   targetBearing: 0
   relativeBearing: 0
