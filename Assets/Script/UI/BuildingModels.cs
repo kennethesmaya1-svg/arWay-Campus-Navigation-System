@@ -13,6 +13,8 @@ public class BuildingApiResponse
 public class BuildingApiData
 {
     public int id;
+    public string building_node_id;
+    
     public string name;
     public string description;
     public string image;
@@ -28,6 +30,9 @@ public class FacilityEntry
 
 public class BuildingInfo
 {
+    public int buildingId;
+    public string buildingNodeId;
+
     public string title;
     public string description;
     public Sprite buildingImage;

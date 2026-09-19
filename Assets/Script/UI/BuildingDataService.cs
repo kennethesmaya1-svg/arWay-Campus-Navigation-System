@@ -19,6 +19,7 @@ public class BuildingDataService : MonoBehaviour
     [Header("Image Settings")]
     [Tooltip("Maximum image size downloaded from Firebase Storage or Cloudinary.")]
     [SerializeField] private long maxImageDownloadBytes = 5 * 1024 * 1024;
+
     [Tooltip("Optional Cloudinary delivery URL prefix. Leave empty when Firestore stores the complete URL.")]
     [SerializeField] private string cloudinaryUrlPrefix = "";
 
@@ -32,7 +33,6 @@ public class BuildingDataService : MonoBehaviour
 
     private bool firebaseReady = false;
 
-
     // =========================================================
     // UNITY
     // =========================================================
@@ -42,14 +42,15 @@ public class BuildingDataService : MonoBehaviour
         InitializeFirebase();
     }
 
-
     // =========================================================
     // FIREBASE INITIALIZATION
     // =========================================================
 
     private void InitializeFirebase()
     {
-        Debug.Log("[BuildingData] Checking Firebase dependencies...");
+        Debug.Log(
+            "[BuildingData] Checking Firebase dependencies..."
+        );
 
         FirebaseApp.CheckAndFixDependenciesAsync()
             .ContinueWithOnMainThread(task =>
@@ -85,11 +86,14 @@ public class BuildingDataService : MonoBehaviour
                     return;
                 }
 
-                firebaseApp = FirebaseApp.DefaultInstance;
+                firebaseApp =
+                    FirebaseApp.DefaultInstance;
 
-                firestore = FirebaseFirestore.DefaultInstance;
+                firestore =
+                    FirebaseFirestore.DefaultInstance;
 
-                storage = FirebaseStorage.DefaultInstance;
+                storage =
+                    FirebaseStorage.DefaultInstance;
 
                 firebaseReady = true;
 
@@ -106,149 +110,39 @@ public class BuildingDataService : MonoBehaviour
             });
     }
 
-
     // =========================================================
-    // PUBLIC: GET BUILDING NAME FROM CACHE
-    // =========================================================
-
-    public string GetBuildingNameFromCache(int buildingId)
-    {
-        string cacheKey =
-            $"Cached_Building_{buildingId}";
-
-        if (!PlayerPrefs.HasKey(cacheKey))
-            return string.Empty;
-
-        string rawJson =
-            PlayerPrefs.GetString(cacheKey);
-
-        if (string.IsNullOrEmpty(rawJson))
-            return string.Empty;
-
-        // Current cache entries store the name directly.
-        if (!rawJson.TrimStart().StartsWith("{"))
-            return rawJson;
-
-        try
-        {
-            BuildingApiResponse response =
-                JsonUtility.FromJson<BuildingApiResponse>(rawJson);
-
-            if (response != null &&
-                response.success &&
-                response.buildings != null)
-            {
-                return response.buildings.name ?? string.Empty;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning(
-                $"[BuildingData] Failed to parse cached name " +
-                $"for building ID {buildingId}: {ex.Message}"
-            );
-        }
-
-        return string.Empty;
-    }
-
-    public void FetchBuildingName(
-        int buildingId,
-        Action<string> onSuccess,
-        Action<string> onError)
-    {
-        string cachedName = GetBuildingNameFromCache(buildingId);
-
-        if (Application.internetReachability == NetworkReachability.NotReachable &&
-            !string.IsNullOrEmpty(cachedName))
-        {
-            Debug.Log(
-                $"[BuildingData] Offline. Using cached name for building {buildingId}."
-            );
-            onSuccess?.Invoke(cachedName);
-            return;
-        }
-
-        FetchBuilding(
-            buildingId,
-            info =>
-            {
-                string name = info != null ? info.title : string.Empty;
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    onSuccess?.Invoke(name);
-                }
-                else if (!string.IsNullOrEmpty(cachedName))
-                {
-                    onSuccess?.Invoke(cachedName);
-                }
-                else
-                {
-                    onError?.Invoke(
-                        $"[BuildingData] Building {buildingId} has no name."
-                    );
-                }
-            },
-            error =>
-            {
-                if (!string.IsNullOrEmpty(cachedName))
-                {
-                    Debug.Log(
-                        $"[BuildingData] Using cached name for building {buildingId}."
-                    );
-                    onSuccess?.Invoke(cachedName);
-                    return;
-                }
-
-                onError?.Invoke(error);
-            }
-        );
-    }
-
-
-    // =========================================================
-    // PUBLIC: FETCH BUILDING USING INTEGER ID
+    // PUBLIC: FETCH ALL BUILDINGS / DESTINATIONS
     // =========================================================
 
-    public void FetchBuilding(
-        int buildingId,
-        Action<BuildingInfo> onSuccess,
-        Action<string> onError)
-    {
-        FetchBuilding(
-            buildingId.ToString(),
-            onSuccess,
-            onError
-        );
-    }
-
-
-    // =========================================================
-    // PUBLIC: FETCH BUILDING USING FIRESTORE DOCUMENT ID
-    // =========================================================
-
-    public void FetchBuilding(
-        string buildingId,
-        Action<BuildingInfo> onSuccess,
+    /// <summary>
+    /// Gets every document from the buildings collection.
+    ///
+    /// IMPORTANT:
+    /// Every Firestore document is treated as ONE destination.
+    ///
+    /// buildingId:
+    ///     Identifies the database record.
+    ///
+    /// buildingNodeId:
+    ///     Identifies the Unity NavNode.
+    ///
+    /// Facilities:
+    ///     Information only. They are not destinations.
+    /// </summary>
+    public void FetchAllBuildings(
+        Action<List<BuildingInfo>> onSuccess,
         Action<string> onError)
     {
         StartCoroutine(
-            FetchBuildingRoutine(
-                buildingId,
+            FetchAllBuildingsRoutine(
                 onSuccess,
                 onError
             )
         );
     }
 
-
-    // =========================================================
-    // FETCH BUILDING
-    // =========================================================
-
-    private IEnumerator FetchBuildingRoutine(
-        string buildingId,
-        Action<BuildingInfo> onSuccess,
+    private IEnumerator FetchAllBuildingsRoutine(
+        Action<List<BuildingInfo>> onSuccess,
         Action<string> onError)
     {
         // -----------------------------------------------------
@@ -276,39 +170,473 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
         // -----------------------------------------------------
-        // FIRESTORE DOCUMENT
+        // GET ALL FIRESTORE DOCUMENTS
         // -----------------------------------------------------
 
-        // Debug.Log(
-        //     $"[BuildingData] Requesting Firestore document: " +
-        //     $"buildings/{buildingId}"
-        // );
-
-        DocumentReference document =
-            firestore
-                .Collection(buildingsCollection)
-                .Document(buildingId);
-
+        Debug.Log(
+            $"[BuildingData] Fetching all documents from " +
+            $"Firestore collection '{buildingsCollection}'."
+        );
 
         var firestoreTask =
-            document.GetSnapshotAsync();
-
-
-        // -----------------------------------------------------
-        // WAIT FOR FIRESTORE
-        // -----------------------------------------------------
+            firestore
+                .Collection(buildingsCollection)
+                .GetSnapshotAsync();
 
         while (!firestoreTask.IsCompleted)
         {
             yield return null;
         }
 
+        if (firestoreTask.IsFaulted)
+        {
+            string error =
+                GetFirebaseTaskError(
+                    firestoreTask.Exception
+                );
+
+            Debug.LogError(
+                "[BuildingData] FetchAllBuildings failed: "
+                + error
+            );
+
+            onError?.Invoke(error);
+
+            yield break;
+        }
+
+        if (firestoreTask.IsCanceled)
+        {
+            string error =
+                "[BuildingData] FetchAllBuildings was cancelled.";
+
+            Debug.LogError(error);
+
+            onError?.Invoke(error);
+
+            yield break;
+        }
+
+        QuerySnapshot snapshot =
+            firestoreTask.Result;
+
+        List<BuildingInfo> buildings =
+            new List<BuildingInfo>();
 
         // -----------------------------------------------------
-        // FIRESTORE ERROR
+        // CONVERT EACH FIRESTORE DOCUMENT
         // -----------------------------------------------------
+
+        foreach (DocumentSnapshot document in snapshot.Documents)
+        {
+            if (!document.Exists)
+                continue;
+
+            BuildingInfo info =
+                CreateBuildingInfoFromDocument(
+                    document
+                );
+
+            if (info == null)
+                continue;
+
+            // -------------------------------------------------
+            // DOWNLOAD IMAGE USING THE OLDER IMAGE SYSTEM
+            // -------------------------------------------------
+
+            string imagePath =
+                GetImageUrl(
+                    document.ToDictionary()
+                );
+
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                yield return StartCoroutine(
+                    DownloadBuildingImage(
+                        imagePath,
+                        document.Id,
+                        info,
+                        null
+                    )
+                );
+            }
+
+            buildings.Add(info);
+
+            SaveBuildingNameToCache(
+                document.Id,
+                info.title
+            );
+        }
+
+        Debug.Log(
+            $"[BuildingData] Loaded {buildings.Count} " +
+            "destination records."
+        );
+
+        onSuccess?.Invoke(
+            buildings
+        );
+    }
+
+    // =========================================================
+    // CREATE BUILDING INFO
+    // =========================================================
+
+    private BuildingInfo CreateBuildingInfoFromDocument(
+        DocumentSnapshot snapshot)
+    {
+        if (snapshot == null ||
+            !snapshot.Exists)
+        {
+            return null;
+        }
+
+        Dictionary<string, object> data =
+            snapshot.ToDictionary();
+
+        // -----------------------------------------------------
+        // BUILDING ID
+        // -----------------------------------------------------
+
+        int buildingId;
+
+        if (!int.TryParse(
+                snapshot.Id,
+                out buildingId))
+        {
+            // Fallback to an "id" field if the document ID
+            // itself is not numeric.
+
+            if (!data.TryGetValue(
+                    "id",
+                    out object idValue) ||
+                !int.TryParse(
+                    idValue?.ToString(),
+                    out buildingId))
+            {
+                Debug.LogWarning(
+                    $"[BuildingData] Document '{snapshot.Id}' " +
+                    "does not contain a valid numeric building ID. " +
+                    "Skipped."
+                );
+
+                return null;
+            }
+        }
+
+        // -----------------------------------------------------
+        // BASIC INFORMATION
+        // -----------------------------------------------------
+
+        string name =
+            GetString(
+                data,
+                "name"
+            );
+
+        string description =
+            GetString(
+                data,
+                "description"
+            );
+
+        // -----------------------------------------------------
+        // NAVIGATION NODE
+        // -----------------------------------------------------
+
+        string buildingNodeId =
+            GetString(
+                data,
+                "building_node_id"
+            );
+
+        // -----------------------------------------------------
+        // FACILITIES
+        //
+        // These are INFORMATION ONLY.
+        // They do not have their own navigation node.
+        // -----------------------------------------------------
+
+        List<FacilityEntry> facilities =
+            new List<FacilityEntry>();
+
+        if (data.TryGetValue(
+                "facilities",
+                out object facilitiesObject))
+        {
+            if (facilitiesObject is List<object> facilityList)
+            {
+                foreach (object facility in facilityList)
+                {
+                    if (facility == null)
+                        continue;
+
+                    string facilityName =
+                        facility.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(
+                            facilityName))
+                    {
+                        facilities.Add(
+                            new FacilityEntry
+                            {
+                                label = facilityName,
+                                icon = null
+                            }
+                        );
+                    }
+                }
+            }
+        }
+
+        // -----------------------------------------------------
+        // CREATE BUILDING INFO
+        // -----------------------------------------------------
+
+        BuildingInfo info =
+            new BuildingInfo
+            {
+                buildingId =
+                    buildingId,
+
+                title =
+                    name,
+
+                description =
+                    description,
+
+                facilities =
+                    facilities,
+
+                buildingNodeId =
+                    buildingNodeId,
+
+                buildingImage =
+                    null
+            };
+
+        if (editorDebugLogs)
+        {
+            Debug.Log(
+                $"[BuildingData] Loaded destination:\n" +
+                $"  buildingId = {info.buildingId}\n" +
+                $"  title = {info.title}\n" +
+                $"  building_node_id = {info.buildingNodeId}\n" +
+                $"  facilities = {info.facilities.Count}"
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                info.buildingNodeId))
+        {
+            Debug.LogWarning(
+                $"[BuildingData] Destination '{info.title}' " +
+                $"(ID {info.buildingId}) has no " +
+                "building_node_id."
+            );
+        }
+
+        return info;
+    }
+
+    // =========================================================
+    // PUBLIC: GET BUILDING NAME FROM CACHE
+    // =========================================================
+
+    public string GetBuildingNameFromCache(
+        int buildingId)
+    {
+        string cacheKey =
+            $"Cached_Building_{buildingId}";
+
+        if (!PlayerPrefs.HasKey(cacheKey))
+            return string.Empty;
+
+        string rawJson =
+            PlayerPrefs.GetString(cacheKey);
+
+        if (string.IsNullOrEmpty(rawJson))
+            return string.Empty;
+
+        // Older cache stores the name directly.
+        if (!rawJson.TrimStart().StartsWith("{"))
+            return rawJson;
+
+        try
+        {
+            BuildingApiResponse response =
+                JsonUtility.FromJson<BuildingApiResponse>(
+                    rawJson
+                );
+
+            if (response != null &&
+                response.success &&
+                response.buildings != null)
+            {
+                return response.buildings.name
+                       ?? string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning(
+                $"[BuildingData] Failed to parse cached name " +
+                $"for building ID {buildingId}: {ex.Message}"
+            );
+        }
+
+        return string.Empty;
+    }
+
+    // =========================================================
+    // FETCH BUILDING NAME
+    // =========================================================
+
+    public void FetchBuildingName(
+        int buildingId,
+        Action<string> onSuccess,
+        Action<string> onError)
+    {
+        string cachedName =
+            GetBuildingNameFromCache(
+                buildingId
+            );
+
+        if (Application.internetReachability ==
+                NetworkReachability.NotReachable &&
+            !string.IsNullOrEmpty(cachedName))
+        {
+            Debug.Log(
+                $"[BuildingData] Offline. Using cached name " +
+                $"for building {buildingId}."
+            );
+
+            onSuccess?.Invoke(cachedName);
+
+            return;
+        }
+
+        FetchBuilding(
+            buildingId,
+            info =>
+            {
+                string name =
+                    info != null
+                        ? info.title
+                        : string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    onSuccess?.Invoke(name);
+                }
+                else if (!string.IsNullOrEmpty(cachedName))
+                {
+                    onSuccess?.Invoke(cachedName);
+                }
+                else
+                {
+                    onError?.Invoke(
+                        $"[BuildingData] Building {buildingId} has no name."
+                    );
+                }
+            },
+            error =>
+            {
+                if (!string.IsNullOrEmpty(cachedName))
+                {
+                    Debug.Log(
+                        $"[BuildingData] Using cached name " +
+                        $"for building {buildingId}."
+                    );
+
+                    onSuccess?.Invoke(cachedName);
+
+                    return;
+                }
+
+                onError?.Invoke(error);
+            }
+        );
+    }
+
+    // =========================================================
+    // FETCH BUILDING USING INTEGER ID
+    // =========================================================
+
+    public void FetchBuilding(
+        int buildingId,
+        Action<BuildingInfo> onSuccess,
+        Action<string> onError)
+    {
+        FetchBuilding(
+            buildingId.ToString(),
+            onSuccess,
+            onError
+        );
+    }
+
+    // =========================================================
+    // FETCH BUILDING USING FIRESTORE DOCUMENT ID
+    // =========================================================
+
+    public void FetchBuilding(
+        string buildingId,
+        Action<BuildingInfo> onSuccess,
+        Action<string> onError)
+    {
+        StartCoroutine(
+            FetchBuildingRoutine(
+                buildingId,
+                onSuccess,
+                onError
+            )
+        );
+    }
+
+    // =========================================================
+    // FETCH ONE BUILDING
+    // =========================================================
+
+    private IEnumerator FetchBuildingRoutine(
+        string buildingId,
+        Action<BuildingInfo> onSuccess,
+        Action<string> onError)
+    {
+        float timeout = 15f;
+        float elapsed = 0f;
+
+        while (!firebaseReady && elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!firebaseReady)
+        {
+            string error =
+                "[BuildingData] Firebase is not ready.";
+
+            Debug.LogError(error);
+
+            onError?.Invoke(error);
+
+            yield break;
+        }
+
+        DocumentReference document =
+            firestore
+                .Collection(buildingsCollection)
+                .Document(buildingId);
+
+        var firestoreTask =
+            document.GetSnapshotAsync();
+
+        while (!firestoreTask.IsCompleted)
+        {
+            yield return null;
+        }
 
         if (firestoreTask.IsFaulted)
         {
@@ -327,7 +655,6 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
         if (firestoreTask.IsCanceled)
         {
             string error =
@@ -340,14 +667,8 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
-        // -----------------------------------------------------
-        // GET SNAPSHOT
-        // -----------------------------------------------------
-
         DocumentSnapshot snapshot =
             firestoreTask.Result;
-
 
         if (!snapshot.Exists)
         {
@@ -362,87 +683,30 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
-        // Debug.Log(
-        //     $"[BuildingData] Successfully received " +
-        //     $"buildings/{buildingId}"
-        // );
-
-
-        // -----------------------------------------------------
-        // CONVERT FIRESTORE DATA
-        // -----------------------------------------------------
-
-        Dictionary<string, object> data =
-            snapshot.ToDictionary();
-
-
-        // -----------------------------------------------------
-        // BUILDING INFORMATION
-        // -----------------------------------------------------
-
-        string name =
-            GetString(data, "name");
-
-        string description =
-            GetString(data, "description");
-
-
-        // -----------------------------------------------------
-        // FACILITIES
-        // -----------------------------------------------------
-
-        List<FacilityEntry> facilities =
-            new List<FacilityEntry>();
-
-
-        if (data.TryGetValue("facilities", out object facilitiesObject))
-        {
-            if (facilitiesObject is List<object> facilityList)
-            {
-                foreach (object facility in facilityList)
-                {
-                    if (facility == null)
-                        continue;
-
-                    string facilityName =
-                        facility.ToString();
-
-                    if (!string.IsNullOrWhiteSpace(facilityName))
-                    {
-                        facilities.Add(
-                            new FacilityEntry
-                            {
-                                label = facilityName,
-                                icon = null
-                            }
-                        );
-                    }
-                }
-            }
-        }
-
-
-        // -----------------------------------------------------
-        // CREATE BUILDING INFO
-        // -----------------------------------------------------
-
         BuildingInfo info =
-            new BuildingInfo
-            {
-                title = name,
-                description = description,
-                facilities = facilities
-            };
+            CreateBuildingInfoFromDocument(
+                snapshot
+            );
 
+        if (info == null)
+        {
+            onError?.Invoke(
+                $"[BuildingData] Failed to create BuildingInfo " +
+                $"for document '{buildingId}'."
+            );
+
+            yield break;
+        }
 
         // -----------------------------------------------------
         // IMAGE
         // -----------------------------------------------------
 
+        Dictionary<string, object> data =
+            snapshot.ToDictionary();
+
         string imagePath =
             GetImageUrl(data);
-
 
         if (!string.IsNullOrWhiteSpace(imagePath))
         {
@@ -456,16 +720,14 @@ public class BuildingDataService : MonoBehaviour
             );
         }
 
-
         // -----------------------------------------------------
-        // SAVE BASIC CACHE
+        // CACHE NAME
         // -----------------------------------------------------
 
         SaveBuildingNameToCache(
             buildingId,
-            name
+            info.title
         );
-
 
         // -----------------------------------------------------
         // SUCCESS
@@ -474,9 +736,19 @@ public class BuildingDataService : MonoBehaviour
         onSuccess?.Invoke(info);
     }
 
-
     // =========================================================
-    // DOWNLOAD BUILDING IMAGE
+    // IMAGE
+    // =========================================================
+    //
+    // THIS SECTION FOLLOWS YOUR OLDER VERSION.
+    //
+    // Supports:
+    // 1. Complete HTTPS URL
+    // 2. Cloudinary URL prefix
+    // 3. gs:// Firebase Storage URL
+    // 4. Firebase Storage path
+    // 5. Local image cache
+    //
     // =========================================================
 
     private IEnumerator DownloadBuildingImage(
@@ -491,14 +763,8 @@ public class BuildingDataService : MonoBehaviour
                 $"building_{buildingId}.png"
             );
 
-
-        // -----------------------------------------------------
-        // FIREBASE STORAGE PATH
-        // -----------------------------------------------------
-
         string storagePath =
             imagePath.Trim();
-
 
         // -----------------------------------------------------
         // IF FIRESTORE STORES A FULL HTTPS URL
@@ -509,10 +775,10 @@ public class BuildingDataService : MonoBehaviour
         {
             if (IsCloudinaryUrl(storagePath))
             {
-                // // Debug.Log(
-                //     $"[BuildingData] Downloading building image from Cloudinary: " +
-                //     $"{storagePath}"
-                // );
+                Debug.Log(
+                    $"[BuildingData] Downloading building image " +
+                    $"from Cloudinary: {storagePath}"
+                );
             }
 
             yield return StartCoroutine(
@@ -526,10 +792,16 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-        if (!string.IsNullOrWhiteSpace(cloudinaryUrlPrefix))
+        // -----------------------------------------------------
+        // CLOUDINARY URL PREFIX
+        // -----------------------------------------------------
+
+        if (!string.IsNullOrWhiteSpace(
+                cloudinaryUrlPrefix))
         {
             string cloudinaryUrl =
-                cloudinaryUrlPrefix.TrimEnd('/') + "/" +
+                cloudinaryUrlPrefix.TrimEnd('/') +
+                "/" +
                 storagePath.TrimStart('/');
 
             Debug.Log(
@@ -547,7 +819,6 @@ public class BuildingDataService : MonoBehaviour
 
             yield break;
         }
-
 
         // -----------------------------------------------------
         // IF FIRESTORE STORES gs:// URL
@@ -567,87 +838,56 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
         // -----------------------------------------------------
-        // OTHERWISE TREAT AS FIREBASE STORAGE PATH
+        // FIREBASE STORAGE PATH
         // -----------------------------------------------------
 
-        // Debug.Log(
-        //     $"[BuildingData] Downloading Storage file: " +
-        //     $"{storagePath}"
-        // );
+        if (storage == null)
+        {
+            string error =
+                "[BuildingData] Firebase Storage is not initialized.";
 
-                Debug.Log(
+            Debug.LogError(error);
+
+            onError?.Invoke(error);
+
+            yield break;
+        }
+
+        Debug.Log(
             $"[BuildingData] Firebase Storage download attempt:\n" +
             $"Building ID: {buildingId}\n" +
             $"Storage Path: '{storagePath}'\n" +
             $"Max Bytes: {maxImageDownloadBytes}"
         );
 
-
         StorageReference storageReference =
-            storage
-                .GetReference(storagePath);
-
+            storage.GetReference(
+                storagePath
+            );
 
         var downloadTask =
             storageReference.GetBytesAsync(
                 maxImageDownloadBytes
             );
 
-
         while (!downloadTask.IsCompleted)
         {
             yield return null;
         }
 
-
-        // if (downloadTask.IsFaulted ||
-        //     downloadTask.IsCanceled)
-        // {
-        //     // string error =
-        //     //     "[BuildingData] Firebase Storage image " +
-        //     //     "download failed.";
-
-        //     // Debug.LogWarning(error);
-
-        //     string firebaseError = "Unknown Firebase Storage error.";
-
-        //     if (downloadTask.Exception != null)
-        //     {
-        //         firebaseError =
-        //             downloadTask.Exception.GetBaseException().Message;
-        //     }
-
-        //     Debug.LogError(
-        //         "[BuildingData] Firebase Storage image download failed.\n" +
-        //         $"Building ID: {buildingId}\n" +
-        //         $"Storage Path: {storagePath}\n" +
-        //         $"Error: {firebaseError}"
-        //     );
-
-
-        //     // Try offline image cache.
-
-        //     if (File.Exists(localImagePath))
-        //     {
-        //         info.buildingImage =
-        //             LoadSpriteFromDisk(
-        //                 localImagePath
-        //             );
-        //     }
-
-        //     yield break;
-        // }
-
-        if (downloadTask.IsFaulted || downloadTask.IsCanceled)
+        if (downloadTask.IsFaulted ||
+            downloadTask.IsCanceled)
         {
-            string firebaseError = "Unknown Firebase Storage error.";
+            string firebaseError =
+                "Unknown Firebase Storage error.";
 
             if (downloadTask.Exception != null)
             {
                 firebaseError =
-                    downloadTask.Exception.GetBaseException().ToString();
+                    downloadTask.Exception
+                        .GetBaseException()
+                        .ToString();
             }
 
             Debug.LogError(
@@ -658,34 +898,44 @@ public class BuildingDataService : MonoBehaviour
                 $"Firebase Error:\n{firebaseError}"
             );
 
-            // Try offline image cache.
+            // -------------------------------------------------
+            // TRY LOCAL CACHE
+            // -------------------------------------------------
+
             if (File.Exists(localImagePath))
             {
                 info.buildingImage =
-                    LoadSpriteFromDisk(localImagePath);
+                    LoadSpriteFromDisk(
+                        localImagePath
+                    );
 
                 Debug.Log(
-                    $"[BuildingData] Using cached image for building {buildingId}."
+                    $"[BuildingData] Using cached image " +
+                    $"for building {buildingId}."
                 );
             }
 
             yield break;
         }
 
+        // -----------------------------------------------------
+        // GET IMAGE BYTES
+        // -----------------------------------------------------
 
         byte[] imageBytes =
             downloadTask.Result;
-
 
         File.WriteAllBytes(
             localImagePath,
             imageBytes
         );
 
+        // -----------------------------------------------------
+        // CREATE TEXTURE
+        // -----------------------------------------------------
 
         Texture2D texture =
             new Texture2D(2, 2);
-
 
         if (!texture.LoadImage(imageBytes))
         {
@@ -696,6 +946,9 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
+        // -----------------------------------------------------
+        // CREATE SPRITE
+        // -----------------------------------------------------
 
         info.buildingImage =
             Sprite.Create(
@@ -713,7 +966,6 @@ public class BuildingDataService : MonoBehaviour
             );
     }
 
-
     // =========================================================
     // DOWNLOAD STORAGE gs:// URL
     // =========================================================
@@ -724,6 +976,18 @@ public class BuildingDataService : MonoBehaviour
         BuildingInfo info,
         Action<string> onError)
     {
+        if (storage == null)
+        {
+            string error =
+                "[BuildingData] Firebase Storage is not initialized.";
+
+            Debug.LogError(error);
+
+            onError?.Invoke(error);
+
+            yield break;
+        }
+
         StorageReference reference;
 
         try
@@ -746,43 +1010,47 @@ public class BuildingDataService : MonoBehaviour
             yield break;
         }
 
-
         var task =
             reference.GetBytesAsync(
                 maxImageDownloadBytes
             );
-
 
         while (!task.IsCompleted)
         {
             yield return null;
         }
 
-
         if (task.IsFaulted ||
             task.IsCanceled)
         {
             Debug.LogWarning(
-                "[BuildingData] Could not download image from gs:// URL."
+                "[BuildingData] Could not download image " +
+                "from gs:// URL."
             );
+
+            // Try local cache.
+
+            if (File.Exists(localImagePath))
+            {
+                info.buildingImage =
+                    LoadSpriteFromDisk(
+                        localImagePath
+                    );
+            }
 
             yield break;
         }
 
-
         byte[] bytes =
             task.Result;
-
 
         File.WriteAllBytes(
             localImagePath,
             bytes
         );
 
-
         Texture2D texture =
             new Texture2D(2, 2);
-
 
         if (texture.LoadImage(bytes))
         {
@@ -803,7 +1071,6 @@ public class BuildingDataService : MonoBehaviour
         }
     }
 
-
     // =========================================================
     // DOWNLOAD IMAGE FROM HTTPS
     // =========================================================
@@ -820,7 +1087,6 @@ public class BuildingDataService : MonoBehaviour
 
             yield return request.SendWebRequest();
 
-
             if (request.result ==
                 UnityWebRequest.Result.Success)
             {
@@ -829,16 +1095,17 @@ public class BuildingDataService : MonoBehaviour
                         request
                     );
 
+                // Save local cache.
 
                 byte[] bytes =
                     texture.EncodeToPNG();
-
 
                 File.WriteAllBytes(
                     localImagePath,
                     bytes
                 );
 
+                // Create sprite.
 
                 info.buildingImage =
                     Sprite.Create(
@@ -862,6 +1129,7 @@ public class BuildingDataService : MonoBehaviour
                     $"{request.error}"
                 );
 
+                // Try cached image.
 
                 if (File.Exists(localImagePath))
                 {
@@ -874,7 +1142,6 @@ public class BuildingDataService : MonoBehaviour
         }
     }
 
-
     // =========================================================
     // LOAD IMAGE FROM LOCAL CACHE
     // =========================================================
@@ -885,12 +1152,12 @@ public class BuildingDataService : MonoBehaviour
         try
         {
             byte[] fileData =
-                File.ReadAllBytes(filePath);
-
+                File.ReadAllBytes(
+                    filePath
+                );
 
             Texture2D texture =
                 new Texture2D(2, 2);
-
 
             if (texture.LoadImage(fileData))
             {
@@ -917,10 +1184,8 @@ public class BuildingDataService : MonoBehaviour
             );
         }
 
-
         return null;
     }
-
 
     // =========================================================
     // CACHE NAME
@@ -944,7 +1209,6 @@ public class BuildingDataService : MonoBehaviour
         PlayerPrefs.Save();
     }
 
-
     // =========================================================
     // FIRESTORE STRING HELPER
     // =========================================================
@@ -963,21 +1227,27 @@ public class BuildingDataService : MonoBehaviour
         return value?.ToString() ?? string.Empty;
     }
 
+    // =========================================================
+    // GET IMAGE URL
+    // =========================================================
+
     private string GetImageUrl(
         Dictionary<string, object> data)
     {
         string[] imageFields =
-            {
-                "imageUrl",
-                "image_url",
-                "cloudinaryUrl",
-                "cloudinary_url",
-                "image"
-            };
+        {
+            "imageUrl",
+            "image_url",
+            "cloudinaryUrl",
+            "cloudinary_url",
+            "image"
+        };
 
         foreach (string field in imageFields)
         {
-            if (!data.TryGetValue(field, out object value) ||
+            if (!data.TryGetValue(
+                    field,
+                    out object value) ||
                 value == null)
             {
                 continue;
@@ -986,28 +1256,46 @@ public class BuildingDataService : MonoBehaviour
             if (value is Dictionary<string, object> imageData)
             {
                 string nestedUrl =
-                    GetString(imageData, "url");
+                    GetString(
+                        imageData,
+                        "url"
+                    );
 
-                if (string.IsNullOrWhiteSpace(nestedUrl))
+                if (string.IsNullOrWhiteSpace(
+                        nestedUrl))
                 {
                     nestedUrl =
-                        GetString(imageData, "secure_url");
+                        GetString(
+                            imageData,
+                            "secure_url"
+                        );
                 }
 
-                if (!string.IsNullOrWhiteSpace(nestedUrl))
+                if (!string.IsNullOrWhiteSpace(
+                        nestedUrl))
+                {
                     return nestedUrl;
+                }
 
                 continue;
             }
 
-            string imageUrl = value.ToString();
+            string imageUrl =
+                value.ToString();
 
-            if (!string.IsNullOrWhiteSpace(imageUrl))
+            if (!string.IsNullOrWhiteSpace(
+                    imageUrl))
+            {
                 return imageUrl;
+            }
         }
 
         return string.Empty;
     }
+
+    // =========================================================
+    // CLOUDINARY CHECK
+    // =========================================================
 
     private bool IsCloudinaryUrl(
         string url)
@@ -1016,11 +1304,12 @@ public class BuildingDataService : MonoBehaviour
                    url,
                    UriKind.Absolute,
                    out Uri parsedUri)
-               && parsedUri.Host.IndexOf(
-                      "cloudinary.com",
-                      StringComparison.OrdinalIgnoreCase) >= 0;
+               &&
+               parsedUri.Host.IndexOf(
+                   "cloudinary.com",
+                   StringComparison.OrdinalIgnoreCase
+               ) >= 0;
     }
-
 
     // =========================================================
     // FIREBASE ERROR

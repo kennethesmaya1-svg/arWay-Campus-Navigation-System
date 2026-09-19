@@ -19,6 +19,8 @@ public class NavNode : MonoBehaviour
 
     [Header("Database")]
     public int buildingId = -1;
+    [Tooltip("ID of the physical location point.")]
+    public string buildingNodeId;
     public string nodeName;
 
     [Header("GPS")]
