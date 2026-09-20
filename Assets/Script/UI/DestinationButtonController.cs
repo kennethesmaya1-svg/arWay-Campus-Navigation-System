@@ -81,6 +81,9 @@ public class DestinationButtonController : MonoBehaviour
             OnBuildingsLoaded,
             OnBuildingsLoadFailed
         );
+
+        Debug.Log($"[Time Check] 1. Requesting Firebase data at: {Time.realtimeSinceStartup}");
+
     }
 
 
@@ -88,10 +91,11 @@ public class DestinationButtonController : MonoBehaviour
     // BUILDINGS LOADED
     // =========================================================
 
-    private void OnBuildingsLoaded(
-        List<BuildingInfo> result)
+    private void OnBuildingsLoaded(List<BuildingInfo> result)
     {
         buildings.Clear();
+
+        Debug.Log($"[Time Check] 2. Firebase data received. Starting to clone buttons at: {Time.realtimeSinceStartup}");
 
         if (result == null)
         {
@@ -146,6 +150,13 @@ public class DestinationButtonController : MonoBehaviour
             $"[DestinationButtonController] " +
             $"Created {spawnedButtons.Count} destination buttons."
         );
+
+        // Destination metadata is already available, so render the list
+        // immediately. Image loading continues independently in the
+        // background and does not delay button creation.
+        buildingDataService.LoadBuildingImagesInBackground(
+            buildings
+        );
     }
 
 
@@ -155,21 +166,14 @@ public class DestinationButtonController : MonoBehaviour
 
     private void OnBuildingsLoadFailed(string error)
     {
-        Debug.LogError(
-            "[DestinationButtonController] " +
-            "Failed to load buildings: " +
-            error
-        );
+        Debug.LogError("[DestinationButtonController] " + "Failed to load buildings: " + error);
     }
-
 
     // =========================================================
     // BUTTON CLICK
     // =========================================================
 
-    public void SelectDestination(
-        int buildingId,
-        string buildingNodeId)
+    public void SelectDestination(int buildingId, string buildingNodeId)
     {
         Debug.Log(
             $"[DestinationButtonController] " +

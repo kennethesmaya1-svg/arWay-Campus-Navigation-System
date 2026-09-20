@@ -29,8 +29,11 @@ public class ARGuideCharacter : MonoBehaviour
     [Header("Guide Animator")]
     [SerializeField] private float idleAfterSeconds = 5f;
 
+    [Header("Animator")]
+    [SerializeField] private Animator animator;
+
     private float stoppedTimer = 0f;
-    private Animator animator;
+    //private Animator animator;
 
     [Header("Grounding")]
     [SerializeField] private bool keepGrounded = true;
@@ -57,13 +60,12 @@ public class ARGuideCharacter : MonoBehaviour
             );
         }
 
-        animator = GetComponentInChildren<Animator>();
+        if (animator == null)
+        animator = GetComponentInChildren<Animator>(true);
 
         if (animator == null)
         {
-            Debug.LogWarning(
-                "ARGuideCharacter: Animator was not found in this character."
-            );
+            Debug.LogWarning("ARGuideCharacter: Animator was not found in this character.");
         }
     }
 

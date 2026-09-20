@@ -234,33 +234,12 @@ public class BuildingDataService : MonoBehaviour
                 continue;
 
             BuildingInfo info =
-                CreateBuildingInfoFromDocument(
+                CreateDestinationInfoFromDocument(
                     document
                 );
 
             if (info == null)
                 continue;
-
-            // -------------------------------------------------
-            // DOWNLOAD IMAGE USING THE OLDER IMAGE SYSTEM
-            // -------------------------------------------------
-
-            string imagePath =
-                GetImageUrl(
-                    document.ToDictionary()
-                );
-
-            if (!string.IsNullOrWhiteSpace(imagePath))
-            {
-                yield return StartCoroutine(
-                    DownloadBuildingImage(
-                        imagePath,
-                        document.Id,
-                        info,
-                        null
-                    )
-                );
-            }
 
             buildings.Add(info);
 
@@ -280,9 +259,168 @@ public class BuildingDataService : MonoBehaviour
         );
     }
 
+    /// <summary>
+    /// Loads building images after destination metadata has already been
+    /// delivered to the UI. Cached PNG files are used before any network
+    /// request by DownloadBuildingImage.
+    /// </summary>
+    public void LoadBuildingImagesInBackground(
+        IReadOnlyList<BuildingInfo> buildings)
+    {
+        if (buildings == null)
+            return;
+
+        foreach (BuildingInfo building in buildings)
+        {
+            if (building == null)
+                continue;
+
+            StartCoroutine(
+                LoadBuildingImageInBackgroundRoutine(
+                    building.buildingId
+                )
+            );
+        }
+    }
+
+    private IEnumerator LoadBuildingImageInBackgroundRoutine(
+        int buildingId)
+    {
+        string buildingKey = buildingId.ToString();
+
+        if (HasCachedBuildingImage(buildingKey))
+        {
+            BuildingInfo cachedImageInfo =
+                new BuildingInfo
+                {
+                    buildingId = buildingId
+                };
+
+            yield return StartCoroutine(
+                DownloadBuildingImage(
+                    string.Empty,
+                    buildingKey,
+                    cachedImageInfo,
+                    null
+                )
+            );
+
+            yield break;
+        }
+
+        float timeout = 15f;
+        float elapsed = 0f;
+
+        while (!firebaseReady && elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!firebaseReady)
+        {
+            Debug.LogWarning(
+                $"[BuildingData] Could not preload image for " +
+                $"building {buildingId}: Firebase is not ready."
+            );
+            yield break;
+        }
+
+        DocumentSnapshot snapshot = null;
+        var firestoreTask =
+            firestore
+                .Collection(buildingsCollection)
+                .Document(buildingKey)
+                .GetSnapshotAsync();
+
+        while (!firestoreTask.IsCompleted)
+            yield return null;
+
+        if (firestoreTask.IsFaulted ||
+            firestoreTask.IsCanceled)
+        {
+            Debug.LogWarning(
+                $"[BuildingData] Could not fetch image metadata for " +
+                $"building {buildingId}."
+            );
+            yield break;
+        }
+
+        snapshot = firestoreTask.Result;
+
+        if (snapshot == null || !snapshot.Exists)
+            yield break;
+
+        string imagePath =
+            GetImageUrl(snapshot.ToDictionary());
+
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            yield break;
+        }
+
+        BuildingInfo imageInfo =
+            new BuildingInfo
+            {
+                buildingId = buildingId
+            };
+
+        yield return StartCoroutine(
+            DownloadBuildingImage(
+                imagePath,
+                buildingKey,
+                imageInfo,
+                null
+            )
+        );
+    }
+
     // =========================================================
     // CREATE BUILDING INFO
     // =========================================================
+
+    private BuildingInfo CreateDestinationInfoFromDocument(
+        DocumentSnapshot snapshot)
+    {
+        if (snapshot == null ||
+            !snapshot.Exists)
+        {
+            return null;
+        }
+
+        Dictionary<string, object> data =
+            snapshot.ToDictionary();
+
+        int buildingId;
+
+        if (!int.TryParse(
+                snapshot.Id,
+                out buildingId) &&
+            (!data.TryGetValue(
+                    "id",
+                    out object idValue) ||
+             !int.TryParse(
+                    idValue?.ToString(),
+                    out buildingId)))
+        {
+            Debug.LogWarning(
+                $"[BuildingData] Document '{snapshot.Id}' " +
+                "does not contain a valid numeric building ID. Skipped."
+            );
+
+            return null;
+        }
+
+        return new BuildingInfo
+        {
+            buildingId = buildingId,
+            buildingNodeId = GetString(data, "building_node_id"),
+            title = GetString(data, "name"),
+            description = null,
+            facilities = null,
+            buildingImage = null
+        };
+    }
 
     private BuildingInfo CreateBuildingInfoFromDocument(
         DocumentSnapshot snapshot)
@@ -708,7 +846,8 @@ public class BuildingDataService : MonoBehaviour
         string imagePath =
             GetImageUrl(data);
 
-        if (!string.IsNullOrWhiteSpace(imagePath))
+        if (!string.IsNullOrWhiteSpace(imagePath) ||
+            HasCachedBuildingImage(buildingId))
         {
             yield return StartCoroutine(
                 DownloadBuildingImage(
@@ -751,6 +890,17 @@ public class BuildingDataService : MonoBehaviour
     //
     // =========================================================
 
+    private bool HasCachedBuildingImage(string buildingId)
+    {
+        string localImagePath =
+            Path.Combine(
+                Application.persistentDataPath,
+                $"building_{buildingId}.png"
+            );
+
+        return File.Exists(localImagePath);
+    }
+
     private IEnumerator DownloadBuildingImage(
         string imagePath,
         string buildingId,
@@ -762,6 +912,49 @@ public class BuildingDataService : MonoBehaviour
                 Application.persistentDataPath,
                 $"building_{buildingId}.png"
             );
+
+        // -----------------------------------------------------
+        // LOCAL CACHE FIRST
+        // -----------------------------------------------------
+
+        if (File.Exists(localImagePath))
+        {
+            Sprite cachedSprite =
+                LoadSpriteFromDisk(localImagePath);
+
+            if (cachedSprite != null)
+            {
+                info.buildingImage = cachedSprite;
+
+                Debug.Log(
+                    $"[BuildingData] Loaded cached image for " +
+                    $"building {buildingId}."
+                );
+
+                yield break;
+            }
+
+            Debug.LogWarning(
+                $"[BuildingData] Cached image for building " +
+                $"{buildingId} could not be decoded. " +
+                "Falling back to the network source."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            Debug.LogWarning(
+                $"[BuildingData] No network image source is configured " +
+                $"for building {buildingId}."
+            );
+
+            onError?.Invoke(
+                $"[BuildingData] No image source is configured for " +
+                $"building {buildingId}."
+            );
+
+            yield break;
+        }
 
         string storagePath =
             imagePath.Trim();

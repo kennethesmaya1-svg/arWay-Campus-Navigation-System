@@ -923,7 +923,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 70}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &113660369
 MonoBehaviour:
@@ -4781,12 +4781,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0771067264d23324fb15a489583667be, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ARGuideManager
-  guideCharacterPrefab: {fileID: 8044803955680169353, guid: c8f79a35016c14b4789eaf323ac7b240, type: 3}
+  guideCharacterPrefab: {fileID: 3488632799746175394, guid: 4b65e9226acd4a846830acd6348b6719, type: 3}
   CharacterBtnImage: {fileID: 315318610}
   CharacterBtnLabel: {fileID: 1834014659}
   CharacterON: {fileID: 21300000, guid: f499e4ba248c8c84ab41dff0672d5eb4, type: 3}
   CharacterOFF: {fileID: 21300000, guid: b83c4f6d62eff0e44933d2fa5b6bac48, type: 3}
   _objectHelper: {fileID: 604079077}
+  _locationService: {fileID: 1406467160}
   spawnDistanceMeters: 2
   spawnAltitudeMeters: 0
   _routeService: {fileID: 1406467156}
@@ -4808,6 +4809,7 @@ MonoBehaviour:
   maxDistanceFromUser: 5
   userTransform: {fileID: 957938763}
   idleAfterSeconds: 5
+  animator: {fileID: 7908850309565788514, guid: 4b65e9226acd4a846830acd6348b6719, type: 3}
   keepGrounded: 1
   groundOffset: 0
 --- !u!4 &804497883
@@ -5544,7 +5546,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 0, y: 3}
+  m_AnchoredPosition: {x: 0, y: -5}
   m_SizeDelta: {x: 0, y: 250}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &931487502
@@ -7943,7 +7945,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1420407783}
-  - component: {fileID: 1420407782}
+  - component: {fileID: 1420407784}
   m_Layer: 0
   m_Name: DestinationControler
   m_TagString: Untagged
@@ -7951,22 +7953,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 0
---- !u!114 &1420407782
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1420407781}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 19e0bbc122f770f478ba84b0efe7a715, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DestinationButtonController
-  destinationButtonPrefab: {fileID: 1385953682}
-  destinationContent: {fileID: 113660368}
-  buildingDataService: {fileID: 387253567}
-  routeService: {fileID: 1406467156}
 --- !u!4 &1420407783
 Transform:
   m_ObjectHideFlags: 0
@@ -7982,6 +7968,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1420407784
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1420407781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19e0bbc122f770f478ba84b0efe7a715, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DestinationButtonController
+  destinationButtonPrefab: {fileID: 1385953682}
+  destinationContent: {fileID: 113660368}
+  buildingDataService: {fileID: 387253567}
+  routeService: {fileID: 1406467156}
 --- !u!1 &1421214722
 GameObject:
   m_ObjectHideFlags: 0
@@ -8230,7 +8232,6 @@ GameObject:
   - component: {fileID: 1441433347}
   - component: {fileID: 1441433349}
   - component: {fileID: 1441433348}
-  - component: {fileID: 1441433350}
   m_Layer: 5
   m_Name: DestinationBtnPanel
   m_TagString: Untagged
@@ -8296,29 +8297,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1441433346}
   m_CullTransparentMesh: 1
---- !u!114 &1441433350
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1441433346}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0ed3eec62829b4945bbd7e960ec38af9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DestinationSelectionButtons
-  destinationManager: {fileID: 1406467157}
-  routeService: {fileID: 1406467156}
-  nodeManager: {fileID: 1406467158}
-  buildingDataService: {fileID: 387253567}
-  buildingInfoPanel: {fileID: 429354299}
-  arGuideManager: {fileID: 804497881}
-  arWarmupManager: {fileID: 988261089}
-  destinationContent: {fileID: 113660368}
-  destinationButtonPrefab: {fileID: 4728676215088742961, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
-  buttonLabel: {fileID: 497027328}
-  loadingText: Loading destinations...
 --- !u!1 &1467317198
 GameObject:
   m_ObjectHideFlags: 0
@@ -12802,7 +12780,35 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4728676215088742961, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 1385953682}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: OnClick
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: DestinationButton, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 6246731083707210248, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
       objectReference: {fileID: 0}
     - target: {fileID: 8860798332810755722, guid: 3498697a75aeede41931ccdb597fcd68, type: 3}
       propertyPath: m_Pivot.x
