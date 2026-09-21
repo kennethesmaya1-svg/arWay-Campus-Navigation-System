@@ -17,12 +17,13 @@ using UnityEngine;
 public class ARGuideCharacter : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 0.8f;
+    [SerializeField] private float moveSpeed = 0.026f;
     [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float stoppingDistance = 0.5f;
 
     [Tooltip("Maximum allowed distance between the user and the guide.")]
-    [SerializeField] private float maxDistanceFromUser = 5f;
+    [SerializeField] private float maxDistanceFromUser = 3f;
+    [SerializeField] private float slowDownDistanceFromUser = 2.5f;
 
     [SerializeField] private Transform userTransform;
 
@@ -33,7 +34,8 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private Animator animator;
 
     private float stoppedTimer = 0f;
-    //private Animator animator;
+    [SerializeField] private float faceUserAfterSeconds = 3f;
+    [SerializeField] private float faceUserRotationSpeed = 5f;
 
     [Header("Grounding")]
     [SerializeField] private bool keepGrounded = true;
@@ -117,6 +119,7 @@ public class ARGuideCharacter : MonoBehaviour
         // Start in a neutral/idle state.
         SetAnimBool("IsWalking", false);
         SetAnimBool("IsStop", false);
+        SetAnimBool("isDestination", false);
 
         Debug.Log(
             $"ARGuideCharacter: Guiding started. " +
@@ -169,10 +172,7 @@ public class ARGuideCharacter : MonoBehaviour
 
         if (isActuallyMoving)
         {
-            // ---------------------------------------------
             // GUIDE IS MOVING
-            // ---------------------------------------------
-
             stoppedTimer = 0f;
 
             SetAnimBool("IsWalking", true);
@@ -180,10 +180,7 @@ public class ARGuideCharacter : MonoBehaviour
         }
         else
         {
-            // ---------------------------------------------
             // GUIDE IS NOT MOVING
-            // ---------------------------------------------
-
             SetAnimBool("IsWalking", false);
 
             stoppedTimer += Time.deltaTime;
@@ -198,7 +195,47 @@ public class ARGuideCharacter : MonoBehaviour
                 // Stopped for 5 seconds or more.
                 SetAnimBool("IsStop", false);
             }
-        }
+
+             // =========================================
+            // FACE USER AFTER 3 SECONDS OF NOT MOVING
+            // =========================================
+
+            if (stoppedTimer >= faceUserAfterSeconds)
+            {
+                FaceUser();
+            }
+            }
+    }
+
+    // =========================================================
+    // Face the user after 3s
+    // =========================================================
+
+    private void FaceUser()
+    {
+        if (userTransform == null)
+            return;
+
+        Vector3 directionToUser =
+            userTransform.position - transform.position;
+
+        // Ignore height difference.
+        directionToUser.y = 0f;
+
+        if (directionToUser.sqrMagnitude < 0.001f)
+            return;
+
+        Quaternion targetRotation =
+            Quaternion.LookRotation(
+                directionToUser.normalized,
+                Vector3.up
+            );
+
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            faceUserRotationSpeed * Time.deltaTime
+        );
     }
 
     // =========================================================
@@ -217,6 +254,7 @@ public class ARGuideCharacter : MonoBehaviour
 
         SetAnimBool("IsWalking", false);
         SetAnimBool("IsStop", false);
+        SetAnimBool("isDestination", false);
     }
 
     private void Update()
@@ -224,10 +262,7 @@ public class ARGuideCharacter : MonoBehaviour
         if (!isGuiding)
             return;
 
-        // -----------------------------------------------------
         // Check user distance
-        // -----------------------------------------------------
-
         if (userTransform == null)
         {
             Debug.LogWarning(
@@ -262,13 +297,9 @@ public class ARGuideCharacter : MonoBehaviour
 
         if (distanceFromUser > maxDistanceFromUser)
         {
-            /*
-             * IMPORTANT:
-             * Do NOT call MoveTowards().
-             *
-             * The guide physically stops here.
-             */
-
+            //  * IMPORTANT:
+            //  * Do NOT call MoveTowards().
+            //  * The guide physically stops here.
             UpdateAnimator(false);
 
             return;
@@ -340,7 +371,13 @@ public class ARGuideCharacter : MonoBehaviour
 
             if (currentWaypointIndex >= waypoints.Count)
             {
-                StopGuiding();
+                //StopGuiding();
+                 // Destination reached
+                SetAnimBool("IsWalking", false);
+                SetAnimBool("IsStop", false);
+                SetAnimBool("isDestination", true);
+
+                isGuiding = false;
 
                 Debug.Log(
                     "ARGuideCharacter: Destination reached."
@@ -374,9 +411,28 @@ public class ARGuideCharacter : MonoBehaviour
         }
 
         // -----------------------------------------------------
-        // MOVE CHARACTER
+        // ADAPTIVE SPEED BASED ON DISTANCE FROM USER
         // -----------------------------------------------------
 
+        float currentMoveSpeed = moveSpeed;
+
+        // Start slowing down when guide is close to 2.5 meters.
+        if (distanceFromUser >= slowDownDistanceFromUser)
+        {
+            float slowdownAmount =
+                Mathf.InverseLerp(
+                    maxDistanceFromUser,
+                    slowDownDistanceFromUser,
+                    distanceFromUser
+                );
+
+            currentMoveSpeed =
+                moveSpeed * slowdownAmount;
+        }
+
+        // -----------------------------------------------------
+        // MOVE CHARACTER
+        // -----------------------------------------------------
         Vector3 previousPosition =
             transform.position;
 
@@ -384,7 +440,7 @@ public class ARGuideCharacter : MonoBehaviour
             Vector3.MoveTowards(
                 transform.position,
                 targetPosition,
-                moveSpeed *
+                currentMoveSpeed *
                 Time.deltaTime
             );
 
