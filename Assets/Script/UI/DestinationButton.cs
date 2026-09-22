@@ -30,4 +30,18 @@ public class DestinationButton : MonoBehaviour
             buildingNodeId
         );
     }
+
+    public bool MatchesSearch(string searchText)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return true;
+
+        if (label == null)
+            return false;
+
+        return label.text.IndexOf(
+            searchText,
+            System.StringComparison.OrdinalIgnoreCase
+        ) >= 0;
+    }
 }

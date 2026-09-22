@@ -17,13 +17,13 @@ using UnityEngine;
 public class ARGuideCharacter : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 0.026f;
+    [SerializeField] private float moveSpeed = 0.26f;
     [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float stoppingDistance = 0.5f;
 
     [Tooltip("Maximum allowed distance between the user and the guide.")]
-    [SerializeField] private float maxDistanceFromUser = 3f;
-    [SerializeField] private float slowDownDistanceFromUser = 2.5f;
+    [SerializeField] private float maxDistanceFromUser = 5f;
+    [SerializeField] private float slowDownDistanceFromUser = 2f;
 
     [SerializeField] private Transform userTransform;
 
@@ -34,7 +34,7 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private Animator animator;
 
     private float stoppedTimer = 0f;
-    [SerializeField] private float faceUserAfterSeconds = 3f;
+    [SerializeField] private float faceUserAfterSeconds = 5f;
     [SerializeField] private float faceUserRotationSpeed = 5f;
 
     [Header("Grounding")]

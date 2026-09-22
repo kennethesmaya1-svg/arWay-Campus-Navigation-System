@@ -374,6 +374,12 @@ public class ARWarmupManager : MonoBehaviour
             homePanel.SetActive(false);
     }
 
+    public void ShowHomePanel()
+    {
+        if (homePanel != null)
+            homePanel.SetActive(true);
+    }
+
     // ---------------------------------------------------------
     // RETRY
     // ---------------------------------------------------------
