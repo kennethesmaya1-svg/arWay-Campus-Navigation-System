@@ -5,14 +5,11 @@ using UnityEngine;
 /// Moves the guide character through the NavNode route generated
 /// by AStarRouteService.
 ///
-/// ARGuideManager is responsible for placing the character in the
-/// real world. This class is responsible only for movement along
-/// the already-positioned route nodes.
-///
-/// Movement rule:
-/// - User is within 5 meters  -> Guide can move and plays Walking.
-/// - User is farther than 5m  -> Guide stops and plays Stop.
-/// - Guide remains stopped for 5 seconds -> Guide returns to Idle.
+/// Distance behavior:
+/// - 0–2 meters from user: normal movement.
+/// - 2–5 meters: gradually slows down.
+/// - 5 meters: hard stop.
+/// - The guide will NEVER move beyond maxDistanceFromUser.
 /// </summary>
 public class ARGuideCharacter : MonoBehaviour
 {
@@ -21,11 +18,26 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float stoppingDistance = 0.5f;
 
-    [Tooltip("Maximum allowed distance between the user and the guide.")]
-    [SerializeField] private float maxDistanceFromUser = 5f;
+    [Header("Guide Side Offset")]
+    [SerializeField] private float sideOffset = 0.7f;
+    [SerializeField] private bool offsetToRightSide = true;
+
+    [Header("User Distance Control")]
+    [Tooltip("Start slowing the guide at this distance.")]
     [SerializeField] private float slowDownDistanceFromUser = 2f;
 
+    [Tooltip("Preferred distance from the user.")]
+    [SerializeField] private float followDistance = 1.5f;
+
+    [Tooltip("ABSOLUTE maximum horizontal distance between user and guide.")]
+    [SerializeField] private float maxDistanceFromUser = 5f;
+
+    [Header("User Following")]
+    [SerializeField] private float userMovementThreshold = 0.02f;
     [SerializeField] private Transform userTransform;
+
+    private Vector3 previousUserPosition;
+    private bool userIsMoving;
 
     [Header("Guide Animator")]
     [SerializeField] private float idleAfterSeconds = 5f;
@@ -34,8 +46,17 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private Animator animator;
 
     private float stoppedTimer = 0f;
+
+    [Header("Face User")]
     [SerializeField] private float faceUserAfterSeconds = 5f;
     [SerializeField] private float faceUserRotationSpeed = 5f;
+
+    [Header("Destination Rotation")]
+    [SerializeField] private float destinationFaceRotationSpeed = 5f;
+    [SerializeField] private float destinationRotationTolerance = 5f;
+
+    private bool isFacingUserAtDestination = false;
+    private bool destinationReached = false;
 
     [Header("Grounding")]
     [SerializeField] private bool keepGrounded = true;
@@ -47,6 +68,11 @@ public class ARGuideCharacter : MonoBehaviour
 
     public bool IsGuiding => isGuiding;
 
+
+    // =========================================================
+    // UNITY
+    // =========================================================
+
     private void Awake()
     {
         Camera arCamera = Camera.main;
@@ -54,6 +80,7 @@ public class ARGuideCharacter : MonoBehaviour
         if (arCamera != null)
         {
             userTransform = arCamera.transform;
+            previousUserPosition = userTransform.position;
         }
         else
         {
@@ -63,37 +90,68 @@ public class ARGuideCharacter : MonoBehaviour
         }
 
         if (animator == null)
-        animator = GetComponentInChildren<Animator>(true);
+        {
+            animator =
+                GetComponentInChildren<Animator>(true);
+        }
 
         if (animator == null)
         {
-            Debug.LogWarning("ARGuideCharacter: Animator was not found in this character.");
+            Debug.LogWarning(
+                "ARGuideCharacter: Animator was not found in this character."
+            );
         }
     }
 
-    /// <summary>
-    /// Starts movement from the specified waypoint index.
-    /// </summary>
+
+    // =========================================================
+    // USER MOVEMENT
+    // =========================================================
+
+    private void UpdateUserMovement()
+    {
+        if (userTransform == null)
+            return;
+
+        Vector3 currentUserPosition =
+            userTransform.position;
+
+        Vector3 movement =
+            currentUserPosition -
+            previousUserPosition;
+
+        movement.y = 0f;
+
+        float movementDistance =
+            movement.magnitude;
+
+        userIsMoving =
+            movementDistance >=
+            userMovementThreshold;
+
+        previousUserPosition =
+            currentUserPosition;
+    }
+
+
+    // =========================================================
+    // START GUIDING
+    // =========================================================
+
     public void StartGuiding(List<Transform> path)
     {
         StartGuiding(path, 0);
     }
 
-    /// <summary>
-    /// Starts movement along a route.
-    ///
-    /// firstTargetIndex is important because ARGuideManager
-    /// can spawn the character a few meters after route[0].
-    /// The character therefore starts by walking toward the next
-    /// route node instead of walking backward to route[0].
-    /// </summary>
+
     public void StartGuiding(
         List<Transform> path,
         int firstTargetIndex)
     {
         StopGuiding();
 
-        if (path == null || path.Count == 0)
+        if (path == null ||
+            path.Count == 0)
         {
             Debug.LogWarning(
                 "ARGuideCharacter: No path was provided."
@@ -102,7 +160,8 @@ public class ARGuideCharacter : MonoBehaviour
             return;
         }
 
-        waypoints = new List<Transform>(path);
+        waypoints =
+            new List<Transform>(path);
 
         currentWaypointIndex =
             Mathf.Clamp(
@@ -113,13 +172,25 @@ public class ARGuideCharacter : MonoBehaviour
 
         isGuiding = true;
 
-        // Reset the stopped timer whenever a new guide starts.
         stoppedTimer = 0f;
 
-        // Start in a neutral/idle state.
-        SetAnimBool("IsWalking", false);
-        SetAnimBool("IsStop", false);
-        SetAnimBool("isDestination", false);
+        destinationReached = false;
+        isFacingUserAtDestination = false;
+
+        SetAnimBool(
+            "IsWalking",
+            false
+        );
+
+        SetAnimBool(
+            "IsStop",
+            false
+        );
+
+        SetAnimBool(
+            "isDestination",
+            false
+        );
 
         Debug.Log(
             $"ARGuideCharacter: Guiding started. " +
@@ -128,8 +199,9 @@ public class ARGuideCharacter : MonoBehaviour
         );
     }
 
+
     // =========================================================
-    // Animator Functions
+    // ANIMATOR
     // =========================================================
 
     private bool HasParameter(
@@ -142,7 +214,9 @@ public class ARGuideCharacter : MonoBehaviour
             return false;
         }
 
-        foreach (AnimatorControllerParameter p in anim.parameters)
+        foreach (
+            AnimatorControllerParameter p
+            in anim.parameters)
         {
             if (p.name == paramName)
                 return true;
@@ -151,64 +225,80 @@ public class ARGuideCharacter : MonoBehaviour
         return false;
     }
 
+
     private void SetAnimBool(
         string paramName,
         bool value)
     {
-        if (HasParameter(animator, paramName))
+        if (HasParameter(
+            animator,
+            paramName))
         {
-            animator.SetBool(paramName, value);
+            animator.SetBool(
+                paramName,
+                value
+            );
         }
     }
 
-    /// <summary>
-    /// Updates the walking/stopping animation according to
-    /// whether the guide is actually moving.
-    /// </summary>
-    private void UpdateAnimator(bool isActuallyMoving)
+
+    private void UpdateAnimator(
+        bool isActuallyMoving)
     {
         if (animator == null)
             return;
 
         if (isActuallyMoving)
         {
-            // GUIDE IS MOVING
             stoppedTimer = 0f;
 
-            SetAnimBool("IsWalking", true);
-            SetAnimBool("IsStop", false);
+            SetAnimBool(
+                "IsWalking",
+                true
+            );
+
+            SetAnimBool(
+                "IsStop",
+                false
+            );
         }
         else
         {
-            // GUIDE IS NOT MOVING
-            SetAnimBool("IsWalking", false);
+            SetAnimBool(
+                "IsWalking",
+                false
+            );
 
-            stoppedTimer += Time.deltaTime;
+            stoppedTimer +=
+                Time.deltaTime;
 
-            if (stoppedTimer < idleAfterSeconds)
+            if (stoppedTimer <
+                idleAfterSeconds)
             {
-                // Stopped for less than 5 seconds.
-                SetAnimBool("IsStop", true);
+                SetAnimBool(
+                    "IsStop",
+                    true
+                );
             }
             else
             {
-                // Stopped for 5 seconds or more.
-                SetAnimBool("IsStop", false);
+                SetAnimBool(
+                    "IsStop",
+                    false
+                );
             }
 
-             // =========================================
-            // FACE USER AFTER 3 SECONDS OF NOT MOVING
-            // =========================================
-
-            if (stoppedTimer >= faceUserAfterSeconds)
+            if (stoppedTimer >=
+                faceUserAfterSeconds)
             {
                 FaceUser();
             }
-            }
+        }
     }
 
+
     // =========================================================
-    // Face the user after 3s
+    // FACE USER
     // =========================================================
 
     private void FaceUser()
@@ -217,13 +307,16 @@ public class ARGuideCharacter : MonoBehaviour
             return;
 
         Vector3 directionToUser =
-            userTransform.position - transform.position;
+            userTransform.position -
+            transform.position;
 
-        // Ignore height difference.
         directionToUser.y = 0f;
 
-        if (directionToUser.sqrMagnitude < 0.001f)
+        if (directionToUser.sqrMagnitude <
+            0.001f)
+        {
             return;
+        }
 
         Quaternion targetRotation =
             Quaternion.LookRotation(
@@ -231,15 +324,18 @@ public class ARGuideCharacter : MonoBehaviour
                 Vector3.up
             );
 
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation,
-            targetRotation,
-            faceUserRotationSpeed * Time.deltaTime
-        );
+        transform.rotation =
+            Quaternion.Slerp(
+                transform.rotation,
+                targetRotation,
+                faceUserRotationSpeed *
+                Time.deltaTime
+            );
     }
 
+
     // =========================================================
-    // Movement
+    // STOP GUIDING
     // =========================================================
 
     public void StopGuiding()
@@ -252,17 +348,48 @@ public class ARGuideCharacter : MonoBehaviour
 
         stoppedTimer = 0f;
 
-        SetAnimBool("IsWalking", false);
-        SetAnimBool("IsStop", false);
-        SetAnimBool("isDestination", false);
+        SetAnimBool(
+            "IsWalking",
+            false
+        );
+
+        SetAnimBool(
+            "IsStop",
+            false
+        );
+
+        SetAnimBool(
+            "isDestination",
+            false
+        );
     }
+
+
+    // =========================================================
+    // MAIN MOVEMENT
+    // =========================================================
 
     private void Update()
     {
-        if (!isGuiding)
-            return;
+        // -----------------------------------------------------
+        // DESTINATION STATE
+        // -----------------------------------------------------
 
-        // Check user distance
+        if (!isGuiding)
+        {
+            if (destinationReached)
+            {
+                RotateToUserAtDestination();
+            }
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // CHECK USER
+        // -----------------------------------------------------
+
         if (userTransform == null)
         {
             Debug.LogWarning(
@@ -270,18 +397,25 @@ public class ARGuideCharacter : MonoBehaviour
             );
 
             UpdateAnimator(false);
+
             return;
         }
 
-        /*
-         * Use horizontal distance only.
-         *
-         * This prevents the user's camera height and the
-         * character's Y position from affecting the 5-meter rule.
-         */
-        Vector3 guidePosition = transform.position;
-        Vector3 userPosition = userTransform.position;
 
+        UpdateUserMovement();
+
+
+        // -----------------------------------------------------
+        // HORIZONTAL DISTANCE
+        // -----------------------------------------------------
+
+        Vector3 guidePosition =
+            transform.position;
+
+        Vector3 userPosition =
+            userTransform.position;
+
+        // Ignore height difference.
         guidePosition.y = 0f;
         userPosition.y = 0f;
 
@@ -291,22 +425,9 @@ public class ARGuideCharacter : MonoBehaviour
                 userPosition
             );
 
-        // -----------------------------------------------------
-        // USER IS TOO FAR FROM GUIDE
-        // -----------------------------------------------------
-
-        if (distanceFromUser > maxDistanceFromUser)
-        {
-            //  * IMPORTANT:
-            //  * Do NOT call MoveTowards().
-            //  * The guide physically stops here.
-            UpdateAnimator(false);
-
-            return;
-        }
 
         // -----------------------------------------------------
-        // Check route
+        // CHECK ROUTE
         // -----------------------------------------------------
 
         if (waypoints == null ||
@@ -316,18 +437,22 @@ public class ARGuideCharacter : MonoBehaviour
             return;
         }
 
-        if (currentWaypointIndex >= waypoints.Count)
+        if (currentWaypointIndex >=
+            waypoints.Count)
         {
             StopGuiding();
             return;
         }
 
+
         // -----------------------------------------------------
-        // Get current target
+        // GET CURRENT TARGET
         // -----------------------------------------------------
 
         Transform target =
-            waypoints[currentWaypointIndex];
+            waypoints[
+                currentWaypointIndex
+            ];
 
         if (target == null)
         {
@@ -335,11 +460,46 @@ public class ARGuideCharacter : MonoBehaviour
             return;
         }
 
+
         Vector3 targetPosition =
             target.position;
 
+
         // -----------------------------------------------------
-        // Keep character at its current ground height
+        // SIDE OFFSET
+        // -----------------------------------------------------
+
+        Vector3 travelDirection =
+            target.position -
+            transform.position;
+
+        travelDirection.y = 0f;
+
+        if (travelDirection.sqrMagnitude >
+            0.001f)
+        {
+            travelDirection.Normalize();
+
+            Vector3 sideDirection =
+                Vector3.Cross(
+                    Vector3.up,
+                    travelDirection
+                ).normalized;
+
+            if (!offsetToRightSide)
+            {
+                sideDirection =
+                    -sideDirection;
+            }
+
+            targetPosition +=
+                sideDirection *
+                sideOffset;
+        }
+
+
+        // -----------------------------------------------------
+        // KEEP CHARACTER GROUNDED
         // -----------------------------------------------------
 
         if (keepGrounded)
@@ -349,33 +509,52 @@ public class ARGuideCharacter : MonoBehaviour
                 groundOffset;
         }
 
+
         // -----------------------------------------------------
-        // Calculate direction
+        // DIRECTION TO TARGET
         // -----------------------------------------------------
 
         Vector3 direction =
-            targetPosition - transform.position;
+            targetPosition -
+            transform.position;
 
         direction.y = 0f;
 
         float distance =
             direction.magnitude;
 
+
         // -----------------------------------------------------
-        // Reached current waypoint
+        // REACHED WAYPOINT
         // -----------------------------------------------------
 
-        if (distance <= stoppingDistance)
+        if (distance <=
+            stoppingDistance)
         {
             currentWaypointIndex++;
 
-            if (currentWaypointIndex >= waypoints.Count)
+            if (currentWaypointIndex >=
+                waypoints.Count)
             {
-                //StopGuiding();
-                 // Destination reached
-                SetAnimBool("IsWalking", false);
-                SetAnimBool("IsStop", false);
-                SetAnimBool("isDestination", true);
+                destinationReached = true;
+
+                isFacingUserAtDestination =
+                    false;
+
+                SetAnimBool(
+                    "IsWalking",
+                    false
+                );
+
+                SetAnimBool(
+                    "IsStop",
+                    false
+                );
+
+                SetAnimBool(
+                    "isDestination",
+                    false
+                );
 
                 isGuiding = false;
 
@@ -389,11 +568,13 @@ public class ARGuideCharacter : MonoBehaviour
             return;
         }
 
+
         // -----------------------------------------------------
-        // Rotate toward next waypoint
+        // ROTATE TOWARD TARGET
         // -----------------------------------------------------
 
-        if (direction.sqrMagnitude > 0.001f)
+        if (direction.sqrMagnitude >
+            0.001f)
         {
             Quaternion targetRotation =
                 Quaternion.LookRotation(
@@ -410,14 +591,33 @@ public class ARGuideCharacter : MonoBehaviour
                 );
         }
 
+
+        // =====================================================
+        // DISTANCE-BASED SPEED
+        // =====================================================
+
+        float currentMoveSpeed =
+            moveSpeed;
+
+
         // -----------------------------------------------------
-        // ADAPTIVE SPEED BASED ON DISTANCE FROM USER
+        // HARD STOP AT MAXIMUM DISTANCE
         // -----------------------------------------------------
 
-        float currentMoveSpeed = moveSpeed;
+        if (distanceFromUser >=
+            maxDistanceFromUser)
+        {
+            currentMoveSpeed = 0f;
+        }
 
-        // Start slowing down when guide is close to 2.5 meters.
-        if (distanceFromUser >= slowDownDistanceFromUser)
+
+        // -----------------------------------------------------
+        // SLOW DOWN NEAR USER LIMIT
+        // -----------------------------------------------------
+
+        else if (
+            distanceFromUser >=
+            slowDownDistanceFromUser)
         {
             float slowdownAmount =
                 Mathf.InverseLerp(
@@ -427,16 +627,30 @@ public class ARGuideCharacter : MonoBehaviour
                 );
 
             currentMoveSpeed =
-                moveSpeed * slowdownAmount;
+                moveSpeed *
+                slowdownAmount;
         }
 
+
         // -----------------------------------------------------
-        // MOVE CHARACTER
+        // NORMAL SPEED
         // -----------------------------------------------------
+
+        else
+        {
+            currentMoveSpeed =
+                moveSpeed;
+        }
+
+
+        // =====================================================
+        // CALCULATE NEXT POSITION
+        // =====================================================
+
         Vector3 previousPosition =
             transform.position;
 
-        transform.position =
+        Vector3 nextPosition =
             Vector3.MoveTowards(
                 transform.position,
                 targetPosition,
@@ -444,9 +658,52 @@ public class ARGuideCharacter : MonoBehaviour
                 Time.deltaTime
             );
 
+
+        // =====================================================
+        // HARD MAXIMUM DISTANCE PROTECTION
+        // =====================================================
+
+        Vector3 horizontalNextPosition =
+            nextPosition;
+
+        Vector3 horizontalUserPosition =
+            userPosition;
+
+        horizontalNextPosition.y = 0f;
+        horizontalUserPosition.y = 0f;
+
+        float nextDistanceFromUser =
+            Vector3.Distance(
+                horizontalNextPosition,
+                horizontalUserPosition
+            );
+
+
         // -----------------------------------------------------
-        // Determine if the character actually moved
+        // CANCEL MOVEMENT IF NEXT POSITION EXCEEDS 5M
         // -----------------------------------------------------
+
+        if (nextDistanceFromUser >=
+            maxDistanceFromUser)
+        {
+            nextPosition =
+                transform.position;
+
+            currentMoveSpeed = 0f;
+        }
+
+
+        // =====================================================
+        // APPLY MOVEMENT
+        // =====================================================
+
+        transform.position =
+            nextPosition;
+
+
+        // =====================================================
+        // DETERMINE ACTUAL MOVEMENT
+        // =====================================================
 
         float movementAmount =
             Vector3.Distance(
@@ -457,10 +714,104 @@ public class ARGuideCharacter : MonoBehaviour
         bool isActuallyMoving =
             movementAmount > 0.0001f;
 
+
+        // =====================================================
+        // UPDATE ANIMATOR
+        // =====================================================
+
+        UpdateAnimator(
+            isActuallyMoving
+        );
+    }
+
+
+    // =========================================================
+    // FACE USER AT DESTINATION
+    // =========================================================
+
+    private void RotateToUserAtDestination()
+    {
+        if (userTransform == null)
+            return;
+
+        Vector3 directionToUser =
+            userTransform.position -
+            transform.position;
+
+        directionToUser.y = 0f;
+
+
         // -----------------------------------------------------
-        // Update Animator
+        // USER IS VERY CLOSE
         // -----------------------------------------------------
 
-        UpdateAnimator(isActuallyMoving);
+        if (directionToUser.sqrMagnitude <
+            0.001f)
+        {
+            SetAnimBool(
+                "isDestination",
+                true
+            );
+
+            destinationReached = false;
+
+            Debug.Log(
+                "ARGuideCharacter: Facing user. " +
+                "Playing destination animation."
+            );
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // ROTATE TOWARD USER
+        // -----------------------------------------------------
+
+        Quaternion targetRotation =
+            Quaternion.LookRotation(
+                directionToUser.normalized,
+                Vector3.up
+            );
+
+        transform.rotation =
+            Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                destinationFaceRotationSpeed *
+                Time.deltaTime
+            );
+
+
+        // -----------------------------------------------------
+        // CHECK ROTATION
+        // -----------------------------------------------------
+
+        float angle =
+            Quaternion.Angle(
+                transform.rotation,
+                targetRotation
+            );
+
+
+        if (angle <=
+            destinationRotationTolerance)
+        {
+            transform.rotation =
+                targetRotation;
+
+            SetAnimBool(
+                "isDestination",
+                true
+            );
+
+            destinationReached = false;
+
+            Debug.Log(
+                "ARGuideCharacter: Finished facing user. " +
+                "Playing isDestination animation."
+            );
+        }
     }
 }
+
