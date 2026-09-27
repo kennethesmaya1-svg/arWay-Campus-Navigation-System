@@ -569,6 +569,49 @@ public class ARGuideCharacter : MonoBehaviour
         }
 
 
+        // =====================================================
+        // MOVEMENT DECISION ORDER
+        // =====================================================
+        // 1. Destination reached has already been handled above.
+        // 2. If the user is not moving, the guide must stop.
+        // 3. If the guide has reached the max allowed distance, stop
+        //    and wait for the user to close back in to the comfort range.
+        // 4. If the guide is approaching the max distance, slow down.
+        // 5. Otherwise the guide moves along the route while the user is
+        //    walking and the guide is within the allowed range.
+
+        float currentMoveSpeed = 0f;
+
+        if (!userIsMoving)
+        {
+            currentMoveSpeed = 0f;
+        }
+        else if (distanceFromUser >=
+                 maxDistanceFromUser)
+        {
+            currentMoveSpeed = 0f;
+        }
+        else if (distanceFromUser >=
+                 slowDownDistanceFromUser)
+        {
+            float slowdownAmount =
+                Mathf.InverseLerp(
+                    maxDistanceFromUser,
+                    slowDownDistanceFromUser,
+                    distanceFromUser
+                );
+
+            currentMoveSpeed =
+                moveSpeed *
+                slowdownAmount;
+        }
+        else
+        {
+            currentMoveSpeed =
+                moveSpeed;
+        }
+
+
         // -----------------------------------------------------
         // ROTATE TOWARD TARGET
         // -----------------------------------------------------
@@ -589,57 +632,6 @@ public class ARGuideCharacter : MonoBehaviour
                     rotationSpeed *
                     Time.deltaTime
                 );
-        }
-
-
-        // =====================================================
-        // DISTANCE-BASED SPEED
-        // =====================================================
-
-        float currentMoveSpeed =
-            moveSpeed;
-
-
-        // -----------------------------------------------------
-        // HARD STOP AT MAXIMUM DISTANCE
-        // -----------------------------------------------------
-
-        if (distanceFromUser >=
-            maxDistanceFromUser)
-        {
-            currentMoveSpeed = 0f;
-        }
-
-
-        // -----------------------------------------------------
-        // SLOW DOWN NEAR USER LIMIT
-        // -----------------------------------------------------
-
-        else if (
-            distanceFromUser >=
-            slowDownDistanceFromUser)
-        {
-            float slowdownAmount =
-                Mathf.InverseLerp(
-                    maxDistanceFromUser,
-                    slowDownDistanceFromUser,
-                    distanceFromUser
-                );
-
-            currentMoveSpeed =
-                moveSpeed *
-                slowdownAmount;
-        }
-
-
-        // -----------------------------------------------------
-        // NORMAL SPEED
-        // -----------------------------------------------------
-
-        else
-        {
-            currentMoveSpeed =
-                moveSpeed;
         }
 
 

@@ -375,6 +375,30 @@ public class BuildingDataService : MonoBehaviour
         );
     }
 
+
+    //Get the Destnation Type of Destination
+    private string GetDestinationType(
+    Dictionary<string, object> data)
+    {
+        string rawType =
+            GetString(data, "destination_type");
+
+        if (string.IsNullOrWhiteSpace(rawType))
+            return "";
+
+        switch (rawType.Trim().ToLower())
+        {
+            case "building":
+                return "Building";
+
+            case "office_facility":
+                return "Office/Facility";
+
+            default:
+                return "";
+        }
+    }
+
     // =========================================================
     // CREATE BUILDING INFO
     // =========================================================
@@ -416,6 +440,7 @@ public class BuildingDataService : MonoBehaviour
             buildingId = buildingId,
             buildingNodeId = GetString(data, "building_node_id"),
             title = GetString(data, "name"),
+            type = GetDestinationType(data),
             description = null,
             facilities = null,
             buildingImage = null
@@ -473,6 +498,9 @@ public class BuildingDataService : MonoBehaviour
                 data,
                 "name"
             );
+
+        string type =
+             GetDestinationType(data);
 
         string description =
             GetString(
@@ -536,23 +564,19 @@ public class BuildingDataService : MonoBehaviour
         BuildingInfo info =
             new BuildingInfo
             {
-                buildingId =
-                    buildingId,
+                buildingId = buildingId,
 
-                title =
-                    name,
+                title = name,
 
-                description =
-                    description,
+                type = type,
 
-                facilities =
-                    facilities,
+                description = description,
 
-                buildingNodeId =
-                    buildingNodeId,
+                facilities = facilities,
 
-                buildingImage =
-                    null
+                buildingNodeId = buildingNodeId,
+
+                buildingImage = null
             };
 
         if (editorDebugLogs)
@@ -1317,13 +1341,16 @@ public class BuildingDataService : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning(
-                    $"[BuildingData] Image download failed: " +
-                    $"{request.error}"
-                );
+                 Debug.LogWarning(
+                                $"[BuildingData] Image download failed\n" +
+                                $"Building ID: {info.buildingId}\n" +
+                                $"URL: {url}\n" +
+                                $"Result: {request.result}\n" +
+                                $"Response Code: {request.responseCode}\n" +
+                                $"Error: {request.error}"
+                            );
 
                 // Try cached image.
-
                 if (File.Exists(localImagePath))
                 {
                     info.buildingImage =

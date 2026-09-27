@@ -16,6 +16,7 @@ public class BuildingApiData
     public string building_node_id;
     
     public string name;
+    public string type;
     public string description;
     public string image;
     public List<string> facilities;
@@ -34,6 +35,7 @@ public class BuildingInfo
     public string buildingNodeId;
 
     public string title;
+    public string type;
     public string description;
     public Sprite buildingImage;
     public List<FacilityEntry> facilities;

@@ -8,19 +8,26 @@ public class DestinationButton : MonoBehaviour
 
     private int buildingId;
     private string buildingNodeId;
+    private string destinationType;
     private DestinationButtonController controller;
 
     public void Setup(
         int buildingId,
         string buildingNodeId,
         string displayName,
+        string destinationType,
         DestinationButtonController controller)
     {
         this.buildingId = buildingId;
         this.buildingNodeId = buildingNodeId;
+        this.destinationType = destinationType;
         this.controller = controller;
 
         label.text = displayName;
+        // Debug.Log(
+        // $"[DestinationButton] " +
+        // $"{displayName} | TYPE = '{destinationType}'"
+    // );
     }
 
     public void OnClick()
@@ -43,5 +50,20 @@ public class DestinationButton : MonoBehaviour
             searchText,
             System.StringComparison.OrdinalIgnoreCase
         ) >= 0;
+    }
+
+    public bool MatchesType(string selectedType)
+    {
+        if (string.IsNullOrWhiteSpace(selectedType) ||
+            selectedType == "All")
+        {
+            return true;
+        }
+
+        return string.Equals(
+            destinationType,
+            selectedType,
+            System.StringComparison.OrdinalIgnoreCase
+        );
     }
 }

@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
+//using UnityEditor.ShaderGraph;
 
 /// <summary>
 /// Creates destination buttons from Firestore building records
@@ -41,6 +43,12 @@ public class DestinationButtonController : MonoBehaviour
     [SerializeField] private GameObject travelUi;
     [SerializeField] private TMP_Text travelDistanceText;
     [SerializeField] private TMP_Text destinationTextName;
+    private string selectedType = "All";
+
+    [Header("Destination Type Filters")]
+    [SerializeField] private Button allButton;
+    [SerializeField] private Button buildingButton;
+    [SerializeField] private Button officeFacilityButton;
 
     [Header("Data")]
     [SerializeField] private BuildingDataService buildingDataService;
@@ -117,6 +125,21 @@ public class DestinationButtonController : MonoBehaviour
         if (searchInput != null)
         {
             searchInput.onValueChanged.AddListener(FilterDestinations);
+        }
+
+        if (allButton != null)
+        {
+            allButton.onClick.AddListener(ShowAll);
+        }
+
+        if (buildingButton != null)
+        {
+            buildingButton.onClick.AddListener(ShowBuildings);
+        }
+
+        if (officeFacilityButton != null)
+        {
+            officeFacilityButton.onClick.AddListener(ShowOfficeFacilities);
         }
     }
 
@@ -254,6 +277,7 @@ public class DestinationButtonController : MonoBehaviour
                 building.buildingId,
                 building.buildingNodeId,
                 building.title,
+                building.type,
                 this
             );
 
@@ -266,9 +290,9 @@ public class DestinationButtonController : MonoBehaviour
         );
 
         // Load images independently in the background.
-        buildingDataService.LoadBuildingImagesInBackground(
-            buildings
-        );
+        // buildingDataService.LoadBuildingImagesInBackground(
+        //     buildings
+        // );
 
         // Hide the original/template button
         if (destinationButtonPrefab.gameObject.activeSelf)
@@ -1030,10 +1054,71 @@ public class DestinationButtonController : MonoBehaviour
             if (button == null)
                 continue;
 
-            bool matches = button.MatchesSearch(searchText);
+            bool matchesSearch =
+                button.MatchesSearch(searchText);
 
-            button.gameObject.SetActive(matches);
+            bool matchesType =
+                button.MatchesType(selectedType);
+
+            bool shouldShow =
+                matchesSearch && matchesType;
+
+            button.gameObject.SetActive(shouldShow);
         }
+    }
+
+    public void ShowAll()
+    {
+        selectedType = "All";
+    
+        if (searchInput != null)
+        {
+            searchInput.SetTextWithoutNotify("");
+        }
+
+        FilterDestinations("");
+         allButton.image.color = Color.red; 
+         buildingButton.image.color = Color.white; 
+         officeFacilityButton.image.color = Color.white;
+        //  allButton.gameObject.SetActive(true);
+        //  buildingButton.gameObject.SetActive(true);
+        //  officeFacilityButton.gameObject.SetActive(true);
+    }
+
+    public void ShowBuildings()
+    {
+        selectedType = "Building";
+        
+        if (searchInput != null)
+        {
+            searchInput.SetTextWithoutNotify("");
+        }
+
+        FilterDestinations("");
+        allButton.image.color = Color.white; 
+        buildingButton.image.color = Color.red; 
+        officeFacilityButton.image.color = Color.white; 
+        // allButton.gameObject.SetActive(true);
+        // buildingButton.gameObject.SetActive(true);
+        // officeFacilityButton.gameObject.SetActive(false);
+    }
+
+    public void ShowOfficeFacilities()
+    {
+        selectedType = "Office/Facility";
+
+        if (searchInput != null)
+        {
+            searchInput.SetTextWithoutNotify("");
+        }
+
+        FilterDestinations("");
+        allButton.image.color = Color.white;
+        buildingButton.image.color = Color.white;  
+        officeFacilityButton.image.color = Color.red;
+        // allButton.gameObject.SetActive(true);
+        // buildingButton.gameObject.SetActive(false);
+        // officeFacilityButton.gameObject.SetActive(true);
     }
 
     private void OnDestroy()
