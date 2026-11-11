@@ -12,7 +12,7 @@ public class ArrowRouteRenderer : MonoBehaviour
     [SerializeField] private AStarRouteService _routeService;
     [SerializeField] private ARWorldPositioningObjectHelper _objectHelper;
     [SerializeField] private GameObject _arrowPrefab;
-    [SerializeField, Min(1f)] private float _arrowSpacingMeters = 7f;
+    [SerializeField, Min(1f)] private float _arrowSpacingMeters = 5f;
 
     private readonly List<GameObject> _arrows = new();
     private bool _missingReferenceWarningShown;

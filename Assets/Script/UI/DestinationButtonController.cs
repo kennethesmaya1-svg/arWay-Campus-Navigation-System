@@ -49,6 +49,9 @@ public class DestinationButtonController : MonoBehaviour
     [SerializeField] private Button allButton;
     [SerializeField] private Button buildingButton;
     [SerializeField] private Button officeFacilityButton;
+    [SerializeField] private TMP_Text allButtonText;
+    [SerializeField] private TMP_Text buildingButtonText;
+    [SerializeField] private TMP_Text officeFacilityButtonText;
 
     [Header("Data")]
     [SerializeField] private BuildingDataService buildingDataService;
@@ -72,7 +75,7 @@ public class DestinationButtonController : MonoBehaviour
 
     public NavNode SelectedDestination { get; private set; }
     [SerializeField] private float distanceUpdateStep = 5f;
-    [SerializeField] private float arrivalDistance = 2f;
+    [SerializeField] private float arrivalDistance = 5f;
     private Coroutine travelDistanceCoroutine;
     private int lastDisplayedDistance = -1;
 
@@ -166,6 +169,7 @@ public class DestinationButtonController : MonoBehaviour
 
     private void Start()
     {
+        ShowAll();
         LoadDestinationButtons();
     }
 
@@ -450,7 +454,7 @@ public class DestinationButtonController : MonoBehaviour
         // -----------------------------------------------------
         if (travelUi != null)
         {
-            travelUi.SetActive(true);
+            travelUi.SetActive(false);
         }
 
          if (destinationTextName != null)
@@ -523,23 +527,13 @@ public class DestinationButtonController : MonoBehaviour
 
     private void OnLocalizationReady()
     {
-        Debug.Log(
-            "[DestinationButtonController] " +
-            "Localization is ready."
-        );
-
-
+        Debug.Log("[DestinationButtonController] " + "Localization is ready.");
         // -----------------------------------------------------
         // MAKE SURE DESTINATION STILL EXISTS
         // -----------------------------------------------------
-
         if (SelectedDestination == null)
         {
-            Debug.LogWarning(
-                "[DestinationButtonController] " +
-                "No destination selected."
-            );
-
+            Debug.LogWarning("[DestinationButtonController] " + "No destination selected.");
             return;
         }
 
@@ -573,19 +567,25 @@ public class DestinationButtonController : MonoBehaviour
         // -----------------------------------------------------
 
         Debug.Log(
-            "[DestinationButtonController] " +
-            "Step 2: Setting active destination."
-        );
+            "[DestinationButtonController] " + "Step 2: Setting active destination.");
 
-        if (!nodeManager.SetActiveDestination(
-                SelectedDestination))
+        if (!nodeManager.SetActiveDestination(SelectedDestination))
         {
-            Debug.LogError(
-                "[DestinationButtonController] " +
-                "Failed to set active destination."
-            );
-
+            Debug.LogError("[DestinationButtonController] " + "Failed to set active destination.");
             return;
+        }
+        // -----------------------------------------------------
+        // UPDATE LOCATION MARKER LABEL TO MATCH DESTINATION
+        // -----------------------------------------------------
+        if (SelectedBuilding != null)
+        {
+            // Find all LocationMarker components, including inactive ones or children
+            LocationMarker[] markers = FindObjectsByType<LocationMarker>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+            foreach (LocationMarker marker in markers)
+            {
+                marker.SetMarkerName(SelectedBuilding.title);
+            }
         }
 
 
@@ -865,8 +865,7 @@ public class DestinationButtonController : MonoBehaviour
 
         private void UpdateTravelDistance()
     {
-        float distance =
-            CalculateDistanceToDestination();
+        float distance = CalculateDistanceToDestination();
 
         if (distance < 0f)
             return;
@@ -895,13 +894,7 @@ public class DestinationButtonController : MonoBehaviour
         // -----------------------------------------------------
         // DO NOT ALLOW THE DISPLAY TO INCREASE
         //
-        // This helps prevent GPS fluctuations such as:
-        //
-        // 20m → 15m → 18m → 15m
-        //
-        // Instead:
-        //
-        // 20m → 15m → 15m
+        // This helps prevent GPS fluctuations.
         // -----------------------------------------------------
 
         if (lastDisplayedDistance >= 0 &&
@@ -921,15 +914,10 @@ public class DestinationButtonController : MonoBehaviour
 
             if (travelDistanceText != null)
             {
-                travelDistanceText.text =
-                    $"{displayDistance} m";
+                travelDistanceText.text = $"{displayDistance} m";
             }
 
-            Debug.Log(
-                $"[DestinationButtonController] " +
-                $"Distance to destination: " +
-                $"{displayDistance}m"
-            );
+            Debug.Log( $"[DestinationButtonController] " + $"Distance to destination: " +  $"{displayDistance}m");
         }
     }
 
@@ -1012,7 +1000,7 @@ public class DestinationButtonController : MonoBehaviour
         if (travelDistanceText != null)
         {
             travelDistanceText.text =
-                "You Arrive";
+                "You Arrived";
         }
 
         Debug.Log(
@@ -1067,41 +1055,56 @@ public class DestinationButtonController : MonoBehaviour
         }
     }
 
+    // Filter Button Colors
+    private readonly Color32 activeImageColor = new Color32(0, 77, 64, 255);    // #004D40
+    private readonly Color32 inactiveImageColor = new Color32(226, 232, 240, 255); // #E2E8F0
+
+    // Filter Text Colors
+    private readonly Color32 activeTextColor = new Color32(255, 255, 255, 255);   // #FFFFFF
+    private readonly Color32 inactiveTextColor = new Color32(30, 41, 59, 255);   // #1E293B
+
+
     public void ShowAll()
     {
         selectedType = "All";
-    
+
         if (searchInput != null)
         {
             searchInput.SetTextWithoutNotify("");
         }
 
         FilterDestinations("");
-         allButton.image.color = Color.red; 
-         buildingButton.image.color = Color.white; 
-         officeFacilityButton.image.color = Color.white;
-        //  allButton.gameObject.SetActive(true);
-        //  buildingButton.gameObject.SetActive(true);
-        //  officeFacilityButton.gameObject.SetActive(true);
+
+        allButton.image.color = activeImageColor;
+        buildingButton.image.color = inactiveImageColor;
+        officeFacilityButton.image.color = inactiveImageColor;
+
+        allButton.GetComponentInChildren<TMPro.TMP_Text>().color = activeTextColor;
+        buildingButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
+        officeFacilityButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
     }
+
 
     public void ShowBuildings()
     {
         selectedType = "Building";
-        
+
         if (searchInput != null)
         {
             searchInput.SetTextWithoutNotify("");
         }
 
         FilterDestinations("");
-        allButton.image.color = Color.white; 
-        buildingButton.image.color = Color.red; 
-        officeFacilityButton.image.color = Color.white; 
-        // allButton.gameObject.SetActive(true);
-        // buildingButton.gameObject.SetActive(true);
-        // officeFacilityButton.gameObject.SetActive(false);
+
+        allButton.image.color = inactiveImageColor;
+        buildingButton.image.color = activeImageColor;
+        officeFacilityButton.image.color = inactiveImageColor;
+
+        allButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
+        buildingButton.GetComponentInChildren<TMPro.TMP_Text>().color = activeTextColor;
+        officeFacilityButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
     }
+
 
     public void ShowOfficeFacilities()
     {
@@ -1113,21 +1116,77 @@ public class DestinationButtonController : MonoBehaviour
         }
 
         FilterDestinations("");
-        allButton.image.color = Color.white;
-        buildingButton.image.color = Color.white;  
-        officeFacilityButton.image.color = Color.red;
-        // allButton.gameObject.SetActive(true);
-        // buildingButton.gameObject.SetActive(false);
-        // officeFacilityButton.gameObject.SetActive(true);
+
+        allButton.image.color = inactiveImageColor;
+        buildingButton.image.color = inactiveImageColor;
+        officeFacilityButton.image.color = activeImageColor;
+
+        allButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
+        buildingButton.GetComponentInChildren<TMPro.TMP_Text>().color = inactiveTextColor;
+        officeFacilityButton.GetComponentInChildren<TMPro.TMP_Text>().color = activeTextColor;
     }
 
+    // public void ShowAll()
+    // {
+    //     selectedType = "All";
+    
+    //     if (searchInput != null)
+    //     {
+    //         searchInput.SetTextWithoutNotify("");
+    //     }
+
+    //     FilterDestinations("");
+    //      allButton.image.color = Color.red; 
+    //      buildingButton.image.color = Color.white; 
+    //      officeFacilityButton.image.color = Color.white;
+    //     //  allButton.gameObject.SetActive(true);
+    //     //  buildingButton.gameObject.SetActive(true);
+    //     //  officeFacilityButton.gameObject.SetActive(true);
+    // }
+
+    // public void ShowBuildings()
+    // {
+    //     selectedType = "Building";
+        
+    //     if (searchInput != null)
+    //     {
+    //         searchInput.SetTextWithoutNotify("");
+    //     }
+
+    //     FilterDestinations("");
+    //     allButton.image.color = Color.white; 
+    //     buildingButton.image.color = Color.red; 
+    //     officeFacilityButton.image.color = Color.white; 
+    //     // allButton.gameObject.SetActive(true);
+    //     // buildingButton.gameObject.SetActive(true);
+    //     // officeFacilityButton.gameObject.SetActive(false);
+    // }
+
+    // public void ShowOfficeFacilities()
+    // {
+    //     selectedType = "Office/Facility";
+
+    //     if (searchInput != null)
+    //     {
+    //         searchInput.SetTextWithoutNotify("");
+    //     }
+
+    //     FilterDestinations("");
+    //     allButton.image.color = Color.white;
+    //     buildingButton.image.color = Color.white;  
+    //     officeFacilityButton.image.color = Color.red;
+    //     // allButton.gameObject.SetActive(true);
+    //     // buildingButton.gameObject.SetActive(false);
+    //     // officeFacilityButton.gameObject.SetActive(true);
+    // }
+
     private void OnDestroy()
-{
-    if (searchInput != null)
     {
-        searchInput.onValueChanged.RemoveListener(
-            FilterDestinations
-        );
+        if (searchInput != null)
+        {
+            searchInput.onValueChanged.RemoveListener(
+                FilterDestinations
+            );
+        }
     }
-}
 }
