@@ -27,7 +27,7 @@
 # Ignore build executables
 *.apk
 *.aab
-*google-services.json
+*.google-services.json
 
 # Ignore Firebase binaries and assets
 Assets/Firebase/
