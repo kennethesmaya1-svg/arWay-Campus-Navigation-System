@@ -42,7 +42,9 @@ public class DestinationButtonController : MonoBehaviour
     [SerializeField] private TMP_InputField searchInput;
     [SerializeField] private GameObject travelUi;
     [SerializeField] private TMP_Text travelDistanceText;
+    // [SerializeField] private TMP_Text travelDistinationText;
     [SerializeField] private TMP_Text destinationTextName;
+    [SerializeField] private GameObject travelDistanceUI;
     private string selectedType = "All";
 
     [Header("Destination Type Filters")]
@@ -75,7 +77,7 @@ public class DestinationButtonController : MonoBehaviour
 
     public NavNode SelectedDestination { get; private set; }
     [SerializeField] private float distanceUpdateStep = 5f;
-    [SerializeField] private float arrivalDistance = 5f;
+    [SerializeField] private float arrivalDistance = 12f;
     private Coroutine travelDistanceCoroutine;
     private int lastDisplayedDistance = -1;
 
@@ -324,9 +326,7 @@ public class DestinationButtonController : MonoBehaviour
     // BUTTON CLICK
     // =========================================================
 
-    public void SelectDestination(
-        int buildingId,
-        string buildingNodeId)
+    public void SelectDestination(int buildingId, string buildingNodeId)
     {
         Debug.Log(
             $"[DestinationButtonController] " +
@@ -335,13 +335,17 @@ public class DestinationButtonController : MonoBehaviour
             $"Building Node ID = {buildingNodeId}"
         );
 
+        // Always hide the arrival UI when selecting a destination.
+        if (travelDistanceUI != null)
+        {
+            travelDistanceUI.SetActive(false);
+        }
 
         // -----------------------------------------------------
         // FIND BUILDING INFORMATION
         // -----------------------------------------------------
 
-        BuildingInfo building =
-            FindBuilding(buildingId);
+        BuildingInfo building = FindBuilding(buildingId);
 
         if (building == null)
         {
@@ -358,8 +362,7 @@ public class DestinationButtonController : MonoBehaviour
         // FIND PHYSICAL NAVNODE
         // -----------------------------------------------------
 
-        NavNode destination =
-            FindNavNode(buildingNodeId);
+        NavNode destination = FindNavNode(buildingNodeId);
 
         if (destination == null)
         {
@@ -490,7 +493,11 @@ public class DestinationButtonController : MonoBehaviour
             StopCoroutine(travelDistanceCoroutine);
             travelDistanceCoroutine = null;
         }
-
+        // Hide the arrival UI.
+        if (travelDistanceUI != null)
+        {
+            travelDistanceUI.SetActive(false);
+        }
         // Show destination selection.
         if (homePanel != null)
         {
@@ -876,6 +883,7 @@ public class DestinationButtonController : MonoBehaviour
 
         if (distance <= arrivalDistance)
         {
+            travelDistanceUI.SetActive(true);
             ShowArrived();
             return;
         }
@@ -997,10 +1005,10 @@ public class DestinationButtonController : MonoBehaviour
 
     private void ShowArrived()
     {
+
         if (travelDistanceText != null)
         {
-            travelDistanceText.text =
-                "You Arrived";
+            travelDistanceText.text = "You Arrived";
         }
 
         Debug.Log(

@@ -32,7 +32,7 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private float maxDistanceFromUser = 3f;
 
     [Header("User Following")]
-    [SerializeField] private float userMovementThreshold = 0.02f;
+    [SerializeField] private float userMovementThreshold = 0.005f;
     [SerializeField] private float verticalAdjustmentSpeed = 1.5f;
     [SerializeField] private Transform userTransform;
 
@@ -63,7 +63,7 @@ public class ARGuideCharacter : MonoBehaviour
     [SerializeField] private float destinationRotationTolerance = 5f;
 
     [Header("Visual Indicators")]
-    [SerializeField] private GameObject waitingBubble;  
+    [SerializeField] private GameObject waitingBubble; 
 
     private bool isFacingUserAtDestination = false;
     private bool destinationReached = false;
@@ -690,21 +690,38 @@ public class ARGuideCharacter : MonoBehaviour
         // Only turn toward the route while the USER is walking.
         // When the user stops, the guide keeps its current facing for the
         // 5-second wait, then FaceUser() takes over.
+        // if (userIsMoving && direction.sqrMagnitude > 0.001f)
+        // {
+        //     Quaternion targetRotation =
+        //         Quaternion.LookRotation(
+        //             direction.normalized,
+        //             Vector3.up
+        //         );
+
+        //     transform.rotation =
+        //         Quaternion.Slerp(
+        //             transform.rotation,
+        //             targetRotation,
+        //             rotationSpeed *
+        //             Time.deltaTime
+        //         );
+        // }
+        // -----------------------------------------------------
+        // ROTATE TOWARD DESTINATION
+        // -----------------------------------------------------
+
         if (userIsMoving && direction.sqrMagnitude > 0.001f)
         {
-            Quaternion targetRotation =
-                Quaternion.LookRotation(
-                    direction.normalized,
-                    Vector3.up
-                );
+            Quaternion targetRotation = Quaternion.LookRotation(
+                direction.normalized,
+                Vector3.up
+            );
 
-            transform.rotation =
-                Quaternion.Slerp(
-                    transform.rotation,
-                    targetRotation,
-                    rotationSpeed *
-                    Time.deltaTime
-                );
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                rotationSpeed * 90f * Time.deltaTime
+            );
         }
 
 
